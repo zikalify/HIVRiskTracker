@@ -533,9 +533,6 @@ function updateGuidance() {
     if (state.profile.sti) {
         level2.push('<li><strong style="color:var(--warning-color)">Active STI:</strong> Untreated STIs cause inflammation that makes it significantly easier for HIV to enter the bloodstream. Complete your treatment before having sex again.</li>');
     }
-    if (uGender === 'cis_male' && !state.profile.circumcised && profileHasSexWith.includes('cis_female')) {
-        level3.push('<li><strong>Circumcision:</strong> Medical male circumcision can reduce the risk of heterosexually acquired HIV infection in men by approximately 60%.</li>');
-    }
 
     // Role-based Advice
     if (state.profile.role === 'receptive' && (hasPenetrativeReceptiveRole || !isVirgin)) {
@@ -573,6 +570,10 @@ function updateGuidance() {
         const hasDisparity = encounterPartnerGenders.some(pg => pg && !profileHasSexWith.includes(pg));
         if (hasDisparity) {
             stiMaintenance.push('<li><strong>Update Profile:</strong> Your logged partners don\'t match your profile settings. Update "My Profile" for more accurate clinical guidance.</li>');
+        }
+
+        if (uGender === 'cis_male' && !state.profile.circumcised && profileHasSexWith.includes('cis_female')) {
+            stiMaintenance.push('<li><strong>Prevention Note:</strong> Medical male circumcision can reduce the risk of heterosexually acquired HIV infection in men by approximately 60%.</li>');
         }
         
         stiMaintenance.push('<li><strong>Symptom Check:</strong> If you notice sores, discharge, or pain when urinating, see a doctor immediately, regardless of your risk score.</li>');
