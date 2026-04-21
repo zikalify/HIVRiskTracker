@@ -428,9 +428,15 @@ function getRecommendedFollowUpTests() {
         return daysSinceTest < windowDays; // Still within testing window
     };
 
-    if (shouldRetestAfterEncounter('hiv')) {
+    // Check if all recent encounters were with confirmed HIV-negative partners
+    const allRecentEncountersHivNegative = state.encounters.every(enc => 
+        enc.partnerStatus === 'negative' || enc.partnerStatus === 'positive_undetectable'
+    );
+    
+    // Only recommend HIV testing if not all partners were confirmed negative
+    if (!allRecentEncountersHivNegative && shouldRetestAfterEncounter('hiv')) {
         recommendations.push('HIV');
-    } else {
+    } else if (!allRecentEncountersHivNegative) {
         const latestHiv = latestTests.hiv;
         if (latestHiv?.result === 'negative') {
             const cutoff = new Date(latestHiv.date);
@@ -914,7 +920,14 @@ function recalculateRiskHistory() {
 // Clinical Risk Logic (Aligned with WHO/CDC Guidance)
 function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actType, condomUse) {
     if (partnerStatus === 'positive_undetectable') return 0; // U=U
-    if (partnerStatus === 'negative') return 0;
+    
+    // For negative HIV status, still calculate risk for other STIs and dashboard logic
+    // but mark as HIV-negative for specific HIV testing recommendations
+    const isHivNegativePartner = partnerStatus === 'negative';
+    if (isHivNegativePartner && partnerSti !== 'yes') {
+        // If partner is HIV-negative and no known STIs, minimal risk but still track for STI screening
+        return 0.1; // Very low risk for dashboard purposes but will trigger STI testing
+    }
 
     // Use a categorical score for internal ranking (not for user display)
     // 0: Negligible, 1: Low, 2: Moderate, 3: High
