@@ -313,6 +313,82 @@ function getCurrentHivRiskContext() {
     };
 }
 
+function hasSexualExposure(encounters = state.encounters) {
+    return encounters.some(enc => enc.actType && enc.actType !== 'other' && enc.actType !== 'shared_needles');
+}
+
+function hasNeedleExposure(encounters = state.encounters) {
+    return encounters.some(enc => enc.actType === 'shared_needles');
+}
+
+function getLatestEncounterDate(encounters = state.encounters) {
+    if (!encounters.length) return null;
+    return encounters
+        .map(enc => new Date(enc.date))
+        .sort((a, b) => b - a)[0];
+}
+
+function isResolvedTestResult(result) {
+    return ['negative', 'treated'].includes(result);
+}
+
+function getRecommendedFollowUpTests() {
+    const recommendations = [];
+    const latestTests = getLatestTestsByType();
+    const latestEncounterDate = getLatestEncounterDate();
+    const sexualExposure = hasSexualExposure();
+    const needleExposure = hasNeedleExposure();
+
+    if (!latestEncounterDate) return recommendations;
+
+    const shouldRetestAfterEncounter = (type) => {
+        const test = latestTests[type];
+        if (!test) return true;
+        if (['pending', 'inconclusive'].includes(test.result)) return true;
+        if (!isResolvedTestResult(test.result) && test.result !== 'positive') return true;
+        return new Date(test.date) < latestEncounterDate;
+    };
+
+    if (shouldRetestAfterEncounter('hiv')) {
+        recommendations.push('HIV');
+    } else {
+        const latestHiv = latestTests.hiv;
+        if (latestHiv?.result === 'negative') {
+            const cutoff = new Date(latestHiv.date);
+            cutoff.setDate(cutoff.getDate() - 30);
+            const hasWindowExposure = state.encounters.some(enc => {
+                const encDate = new Date(enc.date);
+                return encDate >= cutoff && encDate <= new Date(latestHiv.date);
+            });
+            if (hasWindowExposure) {
+                recommendations.push('HIV (repeat after the window period if advised)');
+            }
+        }
+    }
+
+    if (sexualExposure) {
+        ['gonorrhea', 'chlamydia', 'syphilis'].forEach(type => {
+            if (shouldRetestAfterEncounter(type)) {
+                recommendations.push(TEST_TYPE_LABELS[type]);
+            }
+        });
+    }
+
+    if (sexualExposure || needleExposure) {
+        if (shouldRetestAfterEncounter('hep_b')) {
+            recommendations.push('Hep B');
+        }
+    }
+
+    if (needleExposure) {
+        if (shouldRetestAfterEncounter('hep_c')) {
+            recommendations.push('Hep C');
+        }
+    }
+
+    return [...new Set(recommendations)];
+}
+
 function populateTestResultOptions() {
     const type = testTypeSelect.value;
     const options = TEST_RESULT_OPTIONS[type] || [];
@@ -1099,9 +1175,11 @@ function updateGuidance() {
             .sort((a, b) => b - a)[0] || null;
         const lastStiDate = latestResolvedStiDate ? new Date(latestResolvedStiDate) : null;
         const encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
+        const recommendedFollowUpTests = getRecommendedFollowUpTests();
 
         if (encountersSinceTest > 0) {
-            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. Consider repeat testing for the infections relevant to your recent exposure.</li>`);
+            const followUpList = recommendedFollowUpTests.length ? `: ${recommendedFollowUpTests.join(', ')}` : '';
+            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. Consider repeat testing for the infections relevant to your recent exposure${followUpList}.</li>`);
         }
 
         const quarterlyCutoff = new Date();
