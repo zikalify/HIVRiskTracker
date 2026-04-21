@@ -160,7 +160,9 @@ const APP_NOTIFICATION_OPTIONS = {
 };
 
 // Initialize
+console.log('init() called');
 function init() {
+    console.log('init() called');
     loadState();
     toggleCircumcisionVisibility();
     setupEventListeners();
@@ -172,6 +174,7 @@ function init() {
     renderEncounters();
     renderTestingUI();
     handleLaunchActions();
+    console.log('init() completed');
 }
 
 function ensureStateShape() {
@@ -349,7 +352,7 @@ const WHO_TESTING_WINDOWS = {
 };
 
 function getTestingTimingAdvice(recommendedTests, latestEncounterDate) {
-    if (!recommendedTests.length || !latestEncounterDate) return '';
+    if (!recommendedTests.length || !latestEncounterDate) return [];
     
     // Use user's local timezone
     const now = new Date();
@@ -369,20 +372,20 @@ function getTestingTimingAdvice(recommendedTests, latestEncounterDate) {
         let timingText = '';
         if (daysSinceExposure < windowDays) {
             if (daysUntilOptimal > 0) {
-                timingText = ` Test ${testType} in <strong>${daysUntilOptimal} days</strong> (${optimalTestDate.toLocaleDateString()}) for optimal detection.`;
+                timingText = `${testType} in <strong>${daysUntilOptimal} days</strong> (${optimalTestDate.toLocaleDateString()}) for optimal detection.`;
             } else if (daysUntilOptimal === 0) {
-                timingText = ` Test ${testType} <strong>today</strong> for optimal detection.`;
+                timingText = `${testType} <strong>today</strong> for optimal detection.`;
             } else {
-                timingText = ` Test ${testType} as soon as possible (optimal window was ${Math.abs(daysUntilOptimal)} days ago).`;
+                timingText = `${testType} as soon as possible (optimal window was ${Math.abs(daysUntilOptimal)} days ago).`;
             }
         } else {
-            timingText = ` ${testType} testing window has passed; test as soon as possible if not already done.`;
+            timingText = `${testType} testing window has passed; test as soon as possible if not already done.`;
         }
         
         return timingText;
     });
     
-    return timingInfo.length > 0 ? ` <strong>Testing Timing:</strong>${timingInfo.join('')}` : '';
+    return timingInfo;
 }
 
 function getRecommendedFollowUpTests() {
@@ -508,6 +511,7 @@ function populateTestResultOptions() {
 
 function renderTestingUI() {
     const latestTests = getLatestTestsByType();
+    const latestEncounterDate = getLatestEncounterDate();
     latestHivTestDisplay.textContent = formatTestSummary(latestTests.hiv) || 'No result logged';
     latestGonorrheaDisplay.textContent = formatTestSummary(latestTests.gonorrhea) || 'No result logged';
     latestChlamydiaDisplay.textContent = formatTestSummary(latestTests.chlamydia) || 'No result logged';
@@ -646,6 +650,7 @@ function handleLaunchActions() {
 }
 
 function loadState() {
+    console.log('loadState() called');
     const saved = localStorage.getItem('hivRiskState');
     if (saved) {
         try {
@@ -1028,6 +1033,7 @@ function updateDropdownText() {
 
 
 function updateGuidance() {
+    console.log('updateGuidance() called');
     const list = document.getElementById('guidance-list');
     if (!list) return;
 
@@ -1038,6 +1044,7 @@ function updateGuidance() {
     const isVirgin = state.profile.isVirgin;
     const profileFactors = getProfileRiskFactors();
     const latestTests = getLatestTestsByType();
+    const latestEncounterDate = getLatestEncounterDate();
     const latestHivTest = latestTests.hiv;
     const { relevantEncounters, historicalEncounters, windowedEncounters } = getCurrentHivRiskContext();
 
@@ -1211,10 +1218,20 @@ function updateGuidance() {
             const timingAdvice = getTestingTimingAdvice(recommendedFollowUpTests, latestEncounterDate);
             const followUpList = recommendedFollowUpTests.length ? `: ${recommendedFollowUpTests.join(', ')}` : '';
             const message = recommendedFollowUpTests.length > 0 
-                ? `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.${timingAdvice}`
+                ? `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.`
                 : `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. Continue routine screening as recommended by WHO.`;
             
-            stiMaintenance.push(`<li><strong>Follow-Up:</strong> ${message}</li>`);
+            let fullMessage = `<li><strong>Follow-Up:</strong> ${message}`;
+            
+            if (timingAdvice && timingAdvice.length > 0) {
+                fullMessage += `<br><strong>Testing Timing:</strong>`;
+                timingAdvice.forEach(timing => {
+                    fullMessage += `<br><span style="margin-left: 20px; display: inline-block;">• ${timing}</span>`;
+                });
+            }
+            
+            fullMessage += `</li>`;
+            stiMaintenance.push(fullMessage);
         }
 
         const screeningCutoff = new Date();
