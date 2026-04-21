@@ -338,6 +338,53 @@ function isResolvedTestResult(result) {
     return ['negative', 'treated'].includes(result);
 }
 
+// WHO-aligned testing windows (in days) - global for shared access
+const WHO_TESTING_WINDOWS = {
+    'hiv': 42, // 6 weeks for 4th gen, up to 12 weeks for rapid
+    'gonorrhea': 7, // 2-7 days
+    'chlamydia': 7, // 2-7 days  
+    'syphilis': 42, // 3-6 weeks
+    'hep_b': 84, // 4-12 weeks
+    'hep_c': 84 // 4-12 weeks
+};
+
+function getTestingTimingAdvice(recommendedTests, latestEncounterDate) {
+    if (!recommendedTests.length || !latestEncounterDate) return '';
+    
+    // Use user's local timezone
+    const now = new Date();
+    const localNow = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+    const localExposureDate = new Date(latestEncounterDate.getFullYear(), latestEncounterDate.getMonth(), latestEncounterDate.getDate(), latestEncounterDate.getHours(), latestEncounterDate.getMinutes());
+    
+    // Calculate days using local timezone
+    const daysSinceExposure = Math.floor((localNow - localExposureDate) / (1000 * 60 * 60 * 24));
+    
+    const timingInfo = recommendedTests.map(testType => {
+        const windowDays = WHO_TESTING_WINDOWS[testType] || 42;
+        const optimalTestDate = new Date(localExposureDate);
+        optimalTestDate.setDate(optimalTestDate.getDate() + windowDays);
+        
+        const daysUntilOptimal = Math.floor((optimalTestDate - localNow) / (1000 * 60 * 60 * 24));
+        
+        let timingText = '';
+        if (daysSinceExposure < windowDays) {
+            if (daysUntilOptimal > 0) {
+                timingText = ` Test ${testType} in <strong>${daysUntilOptimal} days</strong> (${optimalTestDate.toLocaleDateString()}) for optimal detection.`;
+            } else if (daysUntilOptimal === 0) {
+                timingText = ` Test ${testType} <strong>today</strong> for optimal detection.`;
+            } else {
+                timingText = ` Test ${testType} as soon as possible (optimal window was ${Math.abs(daysUntilOptimal)} days ago).`;
+            }
+        } else {
+            timingText = ` ${testType} testing window has passed; test as soon as possible if not already done.`;
+        }
+        
+        return timingText;
+    });
+    
+    return timingInfo.length > 0 ? ` <strong>Testing Timing:</strong>${timingInfo.join('')}` : '';
+}
+
 function getRecommendedFollowUpTests() {
     const recommendations = [];
     const latestTests = getLatestTestsByType();
@@ -358,7 +405,27 @@ function getRecommendedFollowUpTests() {
         if (!test) return true;
         if (['pending', 'inconclusive'].includes(test.result)) return true;
         if (!isResolvedTestResult(test.result) && test.result !== 'positive') return true;
-        return new Date(test.date) < latestEncounterDate;
+        
+        // WHO-aligned: check if test was done within appropriate window after latest exposure
+        const now = new Date();
+        const testDate = new Date(test.date);
+        const localNow = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+        const localTestDate = new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate(), testDate.getHours(), testDate.getMinutes());
+        const localLatestEncounter = new Date(latestEncounterDate.getFullYear(), latestEncounterDate.getMonth(), latestEncounterDate.getDate(), latestEncounterDate.getHours(), latestEncounterDate.getMinutes());
+        
+        const daysSinceTest = Math.floor((localNow - localTestDate) / (1000 * 60 * 60 * 24));
+        const daysSinceLatestEncounter = Math.floor((localNow - localLatestEncounter) / (1000 * 60 * 60 * 24));
+        
+        // If test was done before latest encounter, definitely need retest
+        if (localTestDate < localLatestEncounter) return true;
+        
+        // If test was done too early after exposure, may need repeat test
+        const windowDays = WHO_TESTING_WINDOWS[type] || 42;
+        if (daysSinceLatestEncounter < windowDays && daysSinceTest >= windowDays) {
+            return false; // Tested appropriately after window period
+        }
+        
+        return daysSinceTest < windowDays; // Still within testing window
     };
 
     if (shouldRetestAfterEncounter('hiv')) {
@@ -1099,9 +1166,15 @@ function updateGuidance() {
         const encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
         const recommendedFollowUpTests = getRecommendedFollowUpTests();
 
-        if (encountersSinceTest > 0) {
+        // WHO-aligned follow-up: persist until all recommended tests are completed
+        if (encountersSinceTest > 0 || recommendedFollowUpTests.length > 0) {
+            const timingAdvice = getTestingTimingAdvice(recommendedFollowUpTests, latestEncounterDate);
             const followUpList = recommendedFollowUpTests.length ? `: ${recommendedFollowUpTests.join(', ')}` : '';
-            stiMaintenance.push(`<li><strong>Follow-Up:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.</li>`);
+            const message = recommendedFollowUpTests.length > 0 
+                ? `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.${timingAdvice}`
+                : `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. Continue routine screening as recommended by WHO.`;
+            
+            stiMaintenance.push(`<li><strong>Follow-Up:</strong> ${message}</li>`);
         }
 
         const screeningCutoff = new Date();
