@@ -7,7 +7,7 @@
     --text-secondary: #9aa0a6;
     --accent-color: #7b61ff;
     --accent-hover: #6046e5;
-    ----success-color: #2eac68;
+    --success-color: #2eac68;
     --warning-color: #f5a623;
     --danger-color: #ff4b4b;
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
@@ -80,51 +80,53 @@ body {
     font-weight: 600;
 }
 
-/* Risk Meter Gauge */
-.risk-meter-container {
+/* Status Indicator */
+.status-indicator-container {
     display: flex;
-    justify-content: center;
     align-items: center;
-    margin: 20px 0;
+    gap: 12px;
+    margin: 10px 0 20px 0;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    width: fit-content;
 }
 
-.circular-chart {
-    display: block;
-    margin: 0 auto;
-    max-width: 80%;
-    max-height: 200px;
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
-.circle-bg {
-    fill: none;
-    stroke: rgba(255, 255, 255, 0.05);
-    stroke-width: 2.5;
+.status-dot.routine { 
+    background-color: var(--success-color); 
+    box-shadow: 0 0 12px var(--success-color); 
+}
+.status-dot.enhanced { 
+    background-color: var(--warning-color); 
+    box-shadow: 0 0 12px var(--warning-color); 
+}
+.status-dot.urgent { 
+    background-color: var(--danger-color); 
+    box-shadow: 0 0 12px var(--danger-color); 
 }
 
-.circle-fill {
-    fill: none;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-    transition: stroke-dasharray 1s ease-out, stroke 0.5s ease;
-}
-
-.risk-level-low .circle-fill { stroke: var(--success-color); }
-.risk-level-medium .circle-fill { stroke: var(--warning-color); }
-.risk-level-high .circle-fill { stroke: var(--danger-color); }
-
-.risk-percentage {
-    fill: var(--text-primary);
-    font-family: inherit;
-    font-size: 5px;
+.status-text {
+    font-size: 1.4rem;
     font-weight: 700;
-    text-anchor: middle;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1;
 }
 
 .risk-description {
-    text-align: center;
+    text-align: left;
     color: var(--text-secondary);
-    font-size: 0.95rem;
+    font-size: 1rem;
     margin-bottom: 24px;
+    line-height: 1.5;
 }
 
 .medical-disclaimer {
@@ -132,6 +134,50 @@ body {
     color: rgba(255, 255, 255, 0.4);
     text-align: center;
     margin-top: -5px;
+}
+
+.recommendation-key {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+    padding-top: 20px;
+    border-top: 1px solid var(--surface-border);
+}
+
+.key-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.key-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.key-dot.routine { background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color); }
+.key-dot.enhanced { background-color: var(--warning-color); box-shadow: 0 0 10px var(--warning-color); }
+.key-dot.urgent { background-color: var(--danger-color); box-shadow: 0 0 10px var(--danger-color); }
+
+.key-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.key-content strong {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.key-content span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
 }
 
 .test-action {

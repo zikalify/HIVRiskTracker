@@ -6,9 +6,11 @@ let state = {
         role: 'versatile',
         onPrep: false,
         onPep: false,
+        pepStartDate: null,
         hepBVaccinated: false,
         circumcised: false,
         sti: false,
+        newPartners: false,
         pwid: false,
         isVirgin: true
     },
@@ -23,11 +25,11 @@ let state = {
 let editingEncounterId = null;
 
 const GENDER_LABELS = {
-    'cis_male': 'Cisgender Men',
-    'cis_female': 'Cisgender Women',
-    'trans_female': 'Transgender Women',
-    'trans_male': 'Transgender Men',
-    'non_binary': 'Non-binary / Others'
+    'cis_male': 'Cisgender Man',
+    'cis_female': 'Cisgender Woman',
+    'trans_female': 'Transgender Woman',
+    'trans_male': 'Transgender Man',
+    'non_binary': 'Non-binary / Other'
 };
 
 const TEST_TYPE_LABELS = {
@@ -93,8 +95,8 @@ const TEST_RESULT_LABELS = {
 };
 
 // DOM Elements
-const riskMeter = document.querySelector('.risk-indicator-path');
-const riskText = document.querySelector('.risk-percentage');
+const statusDot = document.getElementById('status-dot');
+const riskText = document.getElementById('risk-percentage');
 const riskDesc = document.getElementById('risk-description');
 const encounterModal = document.getElementById('encounter-modal');
 const btnNewEncounter = document.getElementById('btn-new-encounter');
@@ -110,9 +112,12 @@ const hasSexWithToggle = document.getElementById('has-sex-with-toggle');
 const userRole = document.getElementById('user-role');
 const userPrep = document.getElementById('user-prep');
 const userPep = document.getElementById('user-pep');
+const userPepStart = document.getElementById('user-pep-start');
+const pepDateGroup = document.getElementById('pep-date-group');
 const userHepBVax = document.getElementById('user-hep-b-vax');
 const userCircumcised = document.getElementById('user-circumcised');
 const userSti = document.getElementById('user-sti');
+const userNewPartners = document.getElementById('user-new-partners');
 const userPwid = document.getElementById('user-pwid');
 const userVirgin = document.getElementById('user-virgin');
 const circumcisionGroup = document.getElementById('circumcision-group');
@@ -121,7 +126,6 @@ const circumcisionGroup = document.getElementById('circumcision-group');
 const encounterForm = document.getElementById('encounter-form');
 const encountersList = document.getElementById('encounters-list');
 const partnerStatusSelect = document.getElementById('partner-status');
-const partnerPrepGroup = document.getElementById('partner-prep-group');
 const partnerSti = document.getElementById('partner-sti');
 const partnerGenderSelect = document.getElementById('partner-gender');
 const encounterDateInput = document.getElementById('encounter-date');
@@ -340,6 +344,12 @@ function getRecommendedFollowUpTests() {
     const latestEncounterDate = getLatestEncounterDate();
     const sexualExposure = hasSexualExposure();
     const needleExposure = hasNeedleExposure();
+    
+    const uGender = state.profile.gender || 'cis_male';
+    const profileHasSexWith = state.profile.hasSexWith || [];
+    const encounterPartnerGenders = state.encounters ? state.encounters.map(e => e.partnerGender) : [];
+    const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
+    const isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg)) || uGender.startsWith('trans_');
 
     if (!latestEncounterDate) return recommendations;
 
@@ -377,14 +387,30 @@ function getRecommendedFollowUpTests() {
     }
 
     if (sexualExposure || needleExposure) {
-        if (!state.profile.hepBVaccinated && shouldRetestAfterEncounter('hep_b')) {
-            recommendations.push('Hep B');
+        const isHighRisk = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
+        
+        // Hep C for PWID and MSM/Trans high-risk networks (WHO)
+        if (state.profile.pwid || isUserInKeyNetwork) {
+            if (shouldRetestAfterEncounter('hep_c')) {
+                recommendations.push('Hep C');
+            }
         }
-    }
 
-    if (needleExposure) {
-        if (shouldRetestAfterEncounter('hep_c')) {
-            recommendations.push('Hep C');
+        // Even if vaccinated, high-risk groups may need baseline or occasional Hep B screening per WHO
+        if (!state.profile.hepBVaccinated) {
+            recommendations.push('Hep B');
+        } else if (isHighRisk) {
+            // If vaccinated but high risk, only recommend if they've NEVER logged a result or it's very old
+            const latestHepB = latestTests.hep_b;
+            if (!latestHepB) {
+                recommendations.push('Hep B (Baseline screening recommended for high-risk groups)');
+            }
+        }
+
+        if (needleExposure) {
+            if (shouldRetestAfterEncounter('hep_c')) {
+                recommendations.push('Hep C');
+            }
         }
     }
 
@@ -511,6 +537,7 @@ function getProfileRiskFactors() {
     if (isTransWoman) factors.push('trans_woman');
     if (state.profile.pwid) factors.push('pwid');
     if (state.profile.sti) factors.push('active_sti');
+    if (state.profile.newPartners) factors.push('new_partners');
     
     return factors;
 }
@@ -535,7 +562,6 @@ function openNewEncounterModal() {
     const today = new Date().toISOString().split('T')[0];
     encounterDateInput.value = today;
 
-    partnerPrepGroup.style.display = 'block';
     encounterModal.classList.add('active');
 }
 
@@ -565,9 +591,12 @@ function loadState() {
     userRole.value = state.profile.role || 'versatile';
     userPrep.checked = state.profile.onPrep || false;
     userPep.checked = state.profile.onPep || false;
+    userPepStart.value = state.profile.pepStartDate || '';
+    pepDateGroup.style.display = userPep.checked ? 'block' : 'none';
     userHepBVax.checked = state.profile.hepBVaccinated || false;
     userCircumcised.checked = state.profile.circumcised || false;
     userSti.checked = state.profile.sti || false;
+    userNewPartners.checked = state.profile.newPartners || false;
     userPwid.checked = state.profile.pwid || false;
     userVirgin.checked = state.profile.isVirgin !== undefined ? state.profile.isVirgin : true;
     updateVirginControl();
@@ -629,12 +658,25 @@ function setupEventListeners() {
         if (e.target.checked) {
             state.profile.onPrep = false;
             userPrep.checked = false;
+            pepDateGroup.style.display = 'block';
+            if (!state.profile.pepStartDate) {
+                const today = new Date().toISOString().split('T')[0];
+                state.profile.pepStartDate = today;
+                userPepStart.value = today;
+            }
+        } else {
+            pepDateGroup.style.display = 'none';
         }
+        saveState();
+    });
+    userPepStart.addEventListener('change', (e) => {
+        state.profile.pepStartDate = e.target.value;
         saveState();
     });
     userHepBVax.addEventListener('change', (e) => { state.profile.hepBVaccinated = e.target.checked; saveState(); });
     userCircumcised.addEventListener('change', (e) => { state.profile.circumcised = e.target.checked; recalculateRiskHistory(); saveState(); });
     userSti.addEventListener('change', (e) => { state.profile.sti = e.target.checked; recalculateRiskHistory(); saveState(); });
+    userNewPartners.addEventListener('change', (e) => { state.profile.newPartners = e.target.checked; saveState(); });
     userPwid.addEventListener('change', (e) => { state.profile.pwid = e.target.checked; recalculateRiskHistory(); saveState(); });
     userVirgin.addEventListener('change', (e) => { state.profile.isVirgin = e.target.checked; refreshApp(); saveState(); });
 
@@ -753,21 +795,11 @@ function setupEventListeners() {
         }
     });
 
-    // Dynamic Form
-    partnerStatusSelect.addEventListener('change', (e) => {
-        if(e.target.value === 'positive_undetectable' || e.target.value === 'positive_detectable') {
-            partnerPrepGroup.style.display = 'none';
-        } else {
-            partnerPrepGroup.style.display = 'block';
-        }
-    });
-
     // Log Encounter
     encounterForm.addEventListener('submit', (e) => {
         e.preventDefault();
         
         const partnerStatus = document.getElementById('partner-status').value;
-        const partnerPrep = document.getElementById('partner-prep').value;
         const partnerGender = document.getElementById('partner-gender').value || 'cis_male';
         const actType = document.getElementById('act-type').value;
         const condomUse = document.getElementById('condom-use').value;
@@ -779,11 +811,10 @@ function setupEventListeners() {
             date: actualDate,
             partnerGender,
             partnerStatus,
-            partnerPrep: partnerStatus.includes('positive') ? 'n/a' : partnerPrep,
             partnerSti: partnerSti.value,
             actType,
             condomUse,
-            riskScore: calculateEncounterRisk(partnerStatus, partnerGender, partnerPrep, partnerSti.value, actType, condomUse)
+            riskScore: calculateEncounterRisk(partnerStatus, partnerGender, partnerSti.value, actType, condomUse)
         };
 
         if (editingEncounterId) {
@@ -808,56 +839,69 @@ function setupEventListeners() {
 function recalculateRiskHistory() {
     if (!state.encounters) return;
     state.encounters = state.encounters.map(enc => {
-        enc.riskScore = calculateEncounterRisk(enc.partnerStatus, enc.partnerGender || 'cis_male', enc.partnerPrep, enc.partnerSti || 'unknown', enc.actType, enc.condomUse);
+        enc.riskScore = calculateEncounterRisk(enc.partnerStatus, enc.partnerGender || 'cis_male', enc.partnerSti || 'unknown', enc.actType, enc.condomUse);
         return enc;
     });
 }
 
-// Medical Heuristic Calculation
-function calculateEncounterRisk(partnerStatus, partnerGender, partnerPrep, partnerSti, actType, condomUse) {
-    if (partnerStatus === 'positive_undetectable') return 0;
+// Clinical Risk Logic (Aligned with WHO/CDC Guidance)
+function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actType, condomUse) {
+    if (partnerStatus === 'positive_undetectable') return 0; // U=U
     if (partnerStatus === 'negative') return 0;
 
-    let baseRisk = 0;
+    // Use a categorical score for internal ranking (not for user display)
+    // 0: Negligible, 1: Low, 2: Moderate, 3: High
+    let riskCategory = 0;
+
     switch(actType) {
-        case 'receptive_anal': baseRisk = 100; break;
-        case 'insertive_anal': baseRisk = 40; break;
-        case 'receptive_vaginal': baseRisk = 20; break;
-        case 'insertive_vaginal': baseRisk = 10; break;
-        case 'giving_oral': baseRisk = 2; break;
-        case 'receiving_oral': baseRisk = 0; break;
-        case 'shared_needles': baseRisk = 100; break;
-        default: baseRisk = 0; break;
+        case 'receptive_anal':
+        case 'shared_needles':
+            riskCategory = 3; 
+            break;
+        case 'insertive_anal':
+        case 'receptive_vaginal':
+            riskCategory = 2;
+            break;
+        case 'insertive_vaginal':
+            riskCategory = 1;
+            break;
+        case 'giving_oral':
+            riskCategory = 0.5;
+            break;
+        case 'receiving_oral':
+        default:
+            riskCategory = 0;
+            break;
     }
 
-    if (actType !== 'shared_needles') {
-        if (condomUse === 'yes') baseRisk *= 0.1;
-        if (condomUse === 'broke') baseRisk *= 0.5;
-
-        // Circumcision mitigation
-        if (state.profile.gender === 'cis_male' && state.profile.circumcised && actType === 'insertive_vaginal') {
-            baseRisk *= 0.4; // 60% reduction
-        }
-        
-        // STI multiplier
-        if (state.profile.sti || partnerSti === 'yes') {
-            baseRisk *= 3.0;
-        }
+    // Condoms are highly effective
+    if (condomUse === 'yes' && riskCategory > 0) {
+        riskCategory = 0.5; // Reduces any higher risk to very low
+    } else if (condomUse === 'broke' && riskCategory > 0) {
+        // Stays at category or slightly elevated context
     }
 
-    if (partnerStatus === 'positive_detectable') baseRisk *= 2;
+    // Multipliers for clinical context
+    let multiplier = 1.0;
+    
+    // Circumcision reduces acquisition risk for men during insertive vaginal sex (WHO)
+    if (state.profile.gender === 'cis_male' && state.profile.circumcised && actType === 'insertive_vaginal') {
+        multiplier *= 0.4; // ~60% reduction
+    }
+
+    if (partnerStatus === 'positive_detectable') multiplier *= 1.5;
     if (partnerStatus === 'unknown') {
-        if (partnerPrep === 'yes') {
-            baseRisk *= 0.1;
-        } else {
-            // WHO Key Population Multiplier for unknown status
-            const isKP = isKeyPopulationEncounter(state.profile.gender || 'cis_male', partnerGender);
-            const kpMultiplier = isKP ? 2.0 : 1.0;
-            baseRisk *= kpMultiplier;
-        }
+        const isKP = isKeyPopulationEncounter(state.profile.gender || 'cis_male', partnerGender);
+        if (isKP) multiplier = 1.2;
     }
 
-    return baseRisk;
+    // STI increases biological vulnerability
+    if (state.profile.sti || partnerSti === 'yes') {
+        multiplier *= 1.3;
+    }
+
+    // Final internal score for dashboard logic
+    return riskCategory * multiplier;
 }
 
 function updateDropdownText() {
@@ -871,203 +915,6 @@ function updateDropdownText() {
     }
 }
 
-function updateGuidance() {
-    const list = document.getElementById('guidance-list');
-    if (!list) return;
-    
-    const uGender = state.profile.gender || 'cis_male';
-    const profileHasSexWith = state.profile.hasSexWith || [];
-    const encounterPartnerGenders = state.encounters ? state.encounters.map(e => e.partnerGender) : [];
-    const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
-    const isVirgin = state.profile.isVirgin;
-    const profileFactors = getProfileRiskFactors();
-    
-    // Check if user is clinically part of a Key Population network
-    let isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg));
-    if (uGender.startsWith('trans_')) isUserInKeyNetwork = true;
-    
-    // WHO clinical indicators for PrEP eligibility
-    const isPrEPCandidate = profileFactors.includes('msm') || 
-                            profileFactors.includes('trans_woman') || 
-                            profileFactors.includes('pwid') || 
-                            profileFactors.includes('active_sti');
-
-    // Messages organized by Priority
-    let level1 = []; // Emergency (Red Box)
-    let level2 = []; // Clinical Warnings (High Priority)
-    let level3 = []; // Advice (Prevention & Partner Safety)
-    let stiMaintenance = []; // Routine (STI History)
-
-    const now = new Date();
-    let hasRecentKPEncounter = false;
-    let hasPenetrativeReceptiveRole = false;
-    let totalRiskScore = 0;
-
-    if (state.encounters) {
-        state.encounters.forEach(enc => {
-            const encDate = new Date(enc.date);
-            const diffHours = (now - encDate) / (1000 * 60 * 60);
-            const encIsKP = isKeyPopulationEncounter(uGender, enc.partnerGender);
-            
-            if (encIsKP) hasRecentKPEncounter = true;
-            if (diffHours <= 720 && (enc.actType === 'receptive_anal' || enc.actType === 'receptive_vaginal')) {
-                hasPenetrativeReceptiveRole = true;
-            }
-            
-            totalRiskScore += enc.riskScore || 0;
-
-            if (diffHours <= 72 && enc.riskScore >= 20) {
-                level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
-                    <strong style="color:var(--danger-color)">🚨 EMERGENCY PEP WINDOW:</strong> 
-                    You had a high-risk exposure within the last 3 days. Go to an emergency room or clinic <strong>RIGHT NOW</strong> to ask for <strong>PEP (Post-Exposure Prophylaxis)</strong>.
-                </li>`);
-            } else if (diffHours <= 720 && enc.riskScore >= 20) {
-                level2.push(`<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now.</li>`);
-            }
-        });
-    }
-
-    // --- PROACTIVE PROFILE-BASED ADVICE (Level 2 & 3) ---
-    
-    // PrEP Recommendation (Proactive)
-    if (!state.profile.onPrep) {
-        if (isPrEPCandidate) {
-            const factorLabels = {
-                'msm': 'Men who have sex with men (MSM)',
-                'trans_woman': 'Transgender Women',
-                'pwid': 'People who inject drugs',
-                'active_sti': 'Active STI history'
-            };
-            const displayFactors = profileFactors.map(f => factorLabels[f] || f.replace(/_/g, ' '));
-            level3.push(`<li><strong style="color:var(--accent-color)">WHO PrEP Recommendation:</strong> Based on your profile (${displayFactors.join(', ')}), daily <strong>PrEP</strong> is highly recommended. It is a powerful tool to stay HIV-free regardless of individual encounter outcomes.</li>`);
-        }
-    } else {
-        level3.push('<li><strong style="color:var(--success-color)">On PrEP:</strong> Great job taking your daily PrEP. Remember, while it protects you from HIV, condoms are still needed for protection against other STIs like Syphilis and Gonorrhea.</li>');
-    }
-
-    // Specific Clinical Factors
-    if (state.profile.pwid) {
-        level2.push('<li><strong style="color:var(--danger-color)">Harm Reduction:</strong> Sharing needles is high risk. Use clean equipment every time. Look for a local "Needle Exchange" program for free, sterile supplies.</li>');
-    }
-    if (state.profile.sti) {
-        level2.push('<li><strong style="color:var(--warning-color)">Active STI:</strong> Untreated STIs cause inflammation that makes it significantly easier for HIV to enter the bloodstream. Complete your treatment before having sex again.</li>');
-    }
-
-    // Role-based Advice
-    if (state.profile.role === 'receptive' && (hasPenetrativeReceptiveRole || !isVirgin)) {
-        level3.push('<li><strong>Receiving Risk:</strong> Receptive penetrative sex (anal or vaginal) carries a higher biological risk. Ensure consistent condom use if not on PrEP.</li>');
-    }
-
-    // Key Population Network Advice
-    if (isUserInKeyNetwork && !isVirgin) {
-        level3.push('<li><strong style="color:var(--accent-color)">Network Safety:</strong> Since you or your partners are part of a key population, WHO recommends a full STI screening every 3 to 6 months.</li>');
-    }
-
-    // --- VIRGIN STATUS ADVICE ---
-    if (isVirgin) {
-        level3.push('<li><strong>Sexual Debut:</strong> Since you have no sexual history, your current risk is zero. This is the perfect time to establish a prevention plan (like starting PrEP) before your first encounter.</li>');
-    }
-
-    // --- STI MAINTENANCE (Level 4) ---
-    if (!isVirgin || state.encounters.length > 0) {
-        let encountersSinceTest = 0;
-        const lastStiDate = state.profile.lastStiTestDate ? new Date(state.profile.lastStiTestDate) : null;
-        encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
-
-        if (encountersSinceTest > 0) {
-            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your last full STI check. Consider a routine panel.</li>`);
-        }
-
-        const quarterlyCutoff = new Date();
-        quarterlyCutoff.setDate(quarterlyCutoff.getDate() - 90);
-        if (!lastStiDate || lastStiDate < quarterlyCutoff) {
-            if (isPrEPCandidate) {
-                stiMaintenance.push('<li><strong style="color:var(--warning-color)">Overdue Screening:</strong> Quarterly screenings are the standard for PrEP users and key populations.</li>');
-            }
-        }
-
-        const hasDisparity = encounterPartnerGenders.some(pg => pg && !profileHasSexWith.includes(pg));
-        if (hasDisparity) {
-            stiMaintenance.push('<li><strong>Update Profile:</strong> Your logged partners don\'t match your profile settings. Update "My Profile" for more accurate clinical guidance.</li>');
-        }
-
-        if (uGender === 'cis_male' && !state.profile.circumcised && profileHasSexWith.includes('cis_female')) {
-            stiMaintenance.push('<li><strong>Prevention Note:</strong> Medical male circumcision can reduce the risk of heterosexually acquired HIV infection in men by approximately 60%.</li>');
-        }
-        
-        stiMaintenance.push('<li><strong>Symptom Check:</strong> If you notice sores, discharge, or pain when urinating, see a doctor immediately, regardless of your risk score.</li>');
-    }
-
-    // Assembler
-    list.innerHTML = '';
-    const allAdvice = [...level1, ...level2, ...level3];
-    if (allAdvice.length > 0) {
-        allAdvice.forEach(msg => list.innerHTML += msg);
-    }
-
-    if (allAdvice.length > 0 && stiMaintenance.length > 0) {
-        list.innerHTML += '<li class="guidance-separator"></li>';
-    }
-
-    if (stiMaintenance.length > 0) {
-        stiMaintenance.forEach(msg => list.innerHTML += msg);
-    }
-
-    if (list.innerHTML === '') {
-        list.innerHTML = '<li><strong>Getting Started:</strong> Update your profile and log encounters to receive personalized clinical guidance.</li>';
-    }
-}
-
-function updateDashboard() {
-    let totalRiskScore = 0;
-    
-    // Accumulate risk from encounters
-    state.encounters.forEach(enc => {
-        totalRiskScore += enc.riskScore || 0;
-    });
-
-    // Apply personal PrEP protection (approx 99% effective)
-    if (state.profile.onPrep) {
-        totalRiskScore *= 0.01;
-    }
-
-    // Determine level
-    let level = 'low';
-    let percent = 25; 
-    let colorClass = 'risk-level-low';
-    let text = "Low";
-    let desc = state.profile.onPrep 
-        ? "PrEP provides excellent protection when taken daily. Your risk remains very low."
-        : "You are maintaining low risk practices.";
-
-    if (totalRiskScore > 0 && totalRiskScore < 20) {
-        // Minor risk added
-        level = 'low';
-        percent = 40;
-        text = "Low";
-        desc = "Your risk remains low, but continue to use preventative measures.";
-    } else if (totalRiskScore >= 20 && totalRiskScore < 60) {
-        level = 'medium';
-        percent = 65;
-        colorClass = 'risk-level-medium';
-        text = "Moderate";
-        desc = "You've logged encounters with moderate risk elements. Consider getting tested or evaluating PrEP.";
-    } else if (totalRiskScore >= 60) {
-        level = 'high';
-        percent = 90;
-        colorClass = 'risk-level-high';
-        text = "High";
-        desc = "Recent encounters pose a significant risk. Please consult a healthcare provider for testing or PEP/PrEP options immediately.";
-    }
-
-    // Update UI
-    riskMeter.parentElement.classList.remove('risk-level-low', 'risk-level-medium', 'risk-level-high');
-    riskMeter.parentElement.classList.add(colorClass);
-    
-    riskMeter.style.strokeDasharray = `${percent}, 100`;
-    riskText.textContent = text;
-    riskDesc.textContent = desc;
-}
 
 function updateGuidance() {
     const list = document.getElementById('guidance-list');
@@ -1089,7 +936,8 @@ function updateGuidance() {
     const isPrEPCandidate = profileFactors.includes('msm') ||
         profileFactors.includes('trans_woman') ||
         profileFactors.includes('pwid') ||
-        profileFactors.includes('active_sti');
+        profileFactors.includes('active_sti') ||
+        profileFactors.includes('new_partners');
 
     let level1 = [];
     let level2 = [];
@@ -1146,27 +994,40 @@ function updateGuidance() {
 
         if (latestHivTest?.result === 'positive') return;
 
-        if (diffHours <= 72 && enc.riskScore >= 20) {
+        // Emergency PEP logic (within 72 hours)
+        if (diffHours <= 72 && enc.riskScore >= 1.0) {
             level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
                 <strong style="color:var(--danger-color)">EMERGENCY PEP WINDOW:</strong>
-                You had a high-risk exposure within the last 3 days. Go to an emergency room or clinic <strong>RIGHT NOW</strong> to ask for <strong>PEP (Post-Exposure Prophylaxis)</strong>.
+                You had a higher-risk exposure within the last 72 hours. WHO recommends <strong>PEP (Post-Exposure Prophylaxis)</strong> as soon as possible, ideally within 24 hours. Seek clinical care immediately.
             </li>`);
-        } else if (diffHours <= 720 && enc.riskScore >= 20) {
+        } else if (diffHours <= 720 && enc.riskScore >= 1.0) {
             level2.push('<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now.</li>');
         }
     });
 
     if (state.profile.onPep && latestHivTest?.result !== 'positive') {
-        level1.push('<li style="background: rgba(255, 159, 10, 0.12); border: 1px solid var(--warning-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;"><strong style="color:var(--warning-color)">On PEP:</strong> WHO recommends starting PEP as soon as possible after a possible HIV exposure, ideally within 24 hours and no later than 72 hours, and completing the full 28-day course.</li>');
-        level2.push('<li><strong style="color:var(--warning-color)">PEP Follow-Up:</strong> Stay in contact with a clinician, complete the full course, and arrange follow-up HIV testing. If you expect ongoing substantial HIV risk after PEP, ask about transitioning to PrEP.</li>');
-        level2.push('<li><strong style="color:var(--warning-color)">Partner Safety:</strong> To help protect other people, avoid condomless sex and do not share injecting equipment while this exposure is being sorted out. Partners should get tested for HIV and other STIs as appropriate, and anyone with ongoing substantial HIV risk should ask about PrEP; if a partner is living with HIV, staying on effective treatment helps prevent transmission.</li>');
+        const pepStart = state.profile.pepStartDate ? new Date(state.profile.pepStartDate) : null;
+        const daysOnPep = pepStart ? Math.floor((now - pepStart) / (1000 * 60 * 60 * 24)) : 0;
+        
+        if (pepStart && daysOnPep <= 28) {
+            level1.push(`<li style="background: rgba(255, 159, 10, 0.12); border: 1px solid var(--warning-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
+                <strong style="color:var(--warning-color)">Currently on PEP (Day ${daysOnPep + 1} of 28):</strong> 
+                Complete the full 28-day course as prescribed. Do not miss doses.
+            </li>`);
+        } else if (pepStart && daysOnPep > 28) {
+            level2.push('<li><strong style="color:var(--warning-color)">PEP Course Completed:</strong> You have passed the 28-day window. Arrange follow-up HIV testing and, if at ongoing risk, ask your provider about transitioning to <strong>PrEP</strong>.</li>');
+        } else {
+            level1.push('<li style="background: rgba(255, 159, 10, 0.12); border: 1px solid var(--warning-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;"><strong style="color:var(--warning-color)">On PEP:</strong> WHO recommends starting PEP within 72 hours of exposure and completing a full 28-day course.</li>');
+        }
+        level2.push('<li><strong style="color:var(--warning-color)">PEP Follow-Up:</strong> Stay in contact with a clinician and arrange follow-up HIV testing. If you expect ongoing substantial HIV risk after PEP, ask about transitioning to PrEP.</li>');
     } else if (!state.profile.onPrep && latestHivTest?.result !== 'positive') {
         if (isPrEPCandidate) {
             const factorLabels = {
                 msm: 'Men who have sex with men (MSM)',
                 trans_woman: 'Transgender Women',
                 pwid: 'People who inject drugs',
-                active_sti: 'Active STI history'
+                active_sti: 'Active STI history',
+                new_partners: 'New or changing partners'
             };
             const displayFactors = profileFactors.map(f => factorLabels[f] || f.replace(/_/g, ' '));
             level3.push(`<li><strong style="color:var(--accent-color)">WHO PrEP Recommendation:</strong> Based on your profile (${displayFactors.join(', ')}), daily <strong>PrEP</strong> is highly recommended. It is a powerful tool to stay HIV-free regardless of individual encounter outcomes.</li>`);
@@ -1177,8 +1038,8 @@ function updateGuidance() {
 
     const shouldSuggestHepBVaccine = !state.profile.hepBVaccinated && (
         state.profile.pwid ||
-        effectiveHasSexWith.length > 0 ||
-        state.encounters.length > 0
+        state.profile.newPartners ||
+        hasNeedleExposure(state.encounters)
     );
 
     if (shouldSuggestHepBVaccine) {
@@ -1197,11 +1058,15 @@ function updateGuidance() {
     }
 
     if (isUserInKeyNetwork && !isVirgin) {
-        level3.push('<li><strong style="color:var(--accent-color)">Network Safety:</strong> Since you or your partners are part of a key population, WHO recommends a full STI screening every 3 to 6 months.</li>');
+        level3.push('<li><strong style="color:var(--accent-color)">Screening Routine:</strong> WHO suggests that for people in key population networks, retesting every 3 to 6 months may be advisable depending on individual risk and local prevalence.</li>');
+    }
+
+    if (state.profile.newPartners && !isVirgin) {
+        level3.push('<li><strong style="color:var(--accent-color)">Retesting:</strong> Because you have new or changing partners, annual HIV and STI screening is a standard recommendation, with more frequent retesting (3-6 months) advisable for some situations.</li>');
     }
 
     if (isVirgin) {
-        level3.push('<li><strong>Sexual Debut:</strong> Since you have no sexual history, your current risk is zero. This is the perfect time to establish a prevention plan (like starting PrEP) before your first encounter.</li>');
+        level3.push('<li><strong>Sexual Debut:</strong> Since you have no sexual history, your current clinical risk is negligible. This is the perfect time to establish a prevention plan (like starting PrEP) before your first encounter.</li>');
     }
 
     if (!isVirgin || state.encounters.length > 0 || state.tests.length > 0) {
@@ -1215,14 +1080,14 @@ function updateGuidance() {
 
         if (encountersSinceTest > 0) {
             const followUpList = recommendedFollowUpTests.length ? `: ${recommendedFollowUpTests.join(', ')}` : '';
-            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. Consider repeat testing for the infections relevant to your recent exposure${followUpList}.</li>`);
+            stiMaintenance.push(`<li><strong>Follow-Up:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.</li>`);
         }
 
-        const quarterlyCutoff = new Date();
-        quarterlyCutoff.setDate(quarterlyCutoff.getDate() - 90);
-        if (!lastStiDate || lastStiDate < quarterlyCutoff) {
-            if (isPrEPCandidate) {
-                stiMaintenance.push('<li><strong style="color:var(--warning-color)">Overdue Screening:</strong> Quarterly screenings are the standard for PrEP users and key populations.</li>');
+        const screeningCutoff = new Date();
+        screeningCutoff.setFullYear(screeningCutoff.getFullYear() - 1);
+        if (!lastStiDate || lastStiDate < screeningCutoff) {
+            if (isPrEPCandidate || state.profile.newPartners) {
+                stiMaintenance.push('<li><strong style="color:var(--warning-color)">Overdue Screening:</strong> Annual retesting is recommended for most with ongoing risk, while quarterly or 6-monthly testing is advisable for PrEP users and those in higher-prevalence networks.</li>');
             }
         }
 
@@ -1270,64 +1135,85 @@ function updateDashboard() {
         totalRiskScore += enc.riskScore || 0;
     });
 
+    // PrEP provides significant protection (internal logic)
     if (state.profile.onPrep) {
-        totalRiskScore *= 0.01;
+        totalRiskScore *= 0.1; 
     }
 
-    let percent = 25;
     let colorClass = 'risk-level-low';
-    let text = 'Low';
+    let text = 'Routine';
     let desc = state.profile.onPrep
-        ? 'PrEP provides excellent protection when taken daily. Your risk remains very low.'
-        : 'You are maintaining low risk practices.';
+        ? 'PrEP provides excellent protection when taken daily. Continue routine check-ups.'
+        : 'Your history suggests routine care. Keep up your current prevention habits.';
+
+    const now = new Date();
+    const hasEmergencyPEPWindow = relevantEncounters.some(enc => {
+        const diffHours = (now - new Date(enc.date)) / (1000 * 60 * 60);
+        return diffHours <= 72 && enc.riskScore >= 1.0;
+    });
 
     if (state.profile.onPep && latestHivTest?.result !== 'positive') {
-        percent = 70;
+        const pepStart = state.profile.pepStartDate ? new Date(state.profile.pepStartDate) : null;
+        const now = new Date();
+        const daysOnPep = pepStart ? Math.floor((now - pepStart) / (1000 * 60 * 60 * 24)) : 0;
+
         colorClass = 'risk-level-medium';
-        text = 'PEP';
-        desc = 'You marked that you are taking PEP after a possible HIV exposure. Complete the full 28-day course and arrange follow-up testing.';
+        text = 'PEP Follow-up';
+        if (pepStart && daysOnPep <= 28) {
+            desc = `You are on Day ${daysOnPep + 1} of your 28-day PEP course. Complete the full course and arrange follow-up testing.`;
+        } else {
+            desc = 'You are in the PEP follow-up phase. Ensure you complete your scheduled HIV tests.';
+        }
     } else if (latestHivTest?.result === 'positive') {
-        percent = 95;
         colorClass = 'risk-level-high';
-        text = 'Follow Up';
-        desc = 'A positive HIV result is logged. The app should shift from acquisition risk to care, confirmatory testing, treatment, and partner support.';
+        text = 'Clinical Care';
+        desc = 'A positive HIV result is logged. The focus is now on confirmatory testing, treatment, and specialist support.';
     } else if (latestHivTest?.result === 'pending' || latestHivTest?.result === 'inconclusive') {
-        percent = 60;
         colorClass = 'risk-level-medium';
-        text = 'Follow Up';
+        text = 'Follow-up';
         desc = latestHivTest.result === 'pending'
-            ? 'An HIV test result is pending. Avoid false reassurance until the final result is back.'
+            ? 'An HIV test result is pending. Follow through with your provider to confirm your status.'
             : 'Your latest HIV test is inconclusive. Arrange repeat or confirmatory testing.';
-    } else if (totalRiskScore > 0 && totalRiskScore < 20) {
-        percent = 40;
-        text = 'Low';
-        desc = latestHivTest?.result === 'negative' && windowedEncounters.length > 0
-            ? 'Your latest HIV test is negative, but a recent exposure is still inside the 30-day window period.'
-            : 'Your risk remains low, but continue to use preventative measures.';
-    } else if (totalRiskScore >= 20 && totalRiskScore < 60) {
-        percent = 65;
-        colorClass = 'risk-level-medium';
-        text = 'Moderate';
-        desc = latestHivTest?.result === 'negative'
-            ? 'You have newer or still-relevant encounters after your latest negative HIV test. Consider follow-up testing and prevention planning.'
-            : "You've logged encounters with moderate risk elements. Consider getting tested or evaluating PrEP.";
-    } else if (totalRiskScore >= 60) {
-        percent = 90;
+    } else if (hasEmergencyPEPWindow) {
         colorClass = 'risk-level-high';
-        text = 'High';
+        text = 'Urgent Action';
+        desc = 'You have had a higher-risk exposure within the 72-hour PEP window. Seek clinical care immediately.';
+    } else if (totalRiskScore > 0 && totalRiskScore < 1.0) {
+        text = 'Routine';
+        desc = latestHivTest?.result === 'negative' && windowedEncounters.length > 0
+            ? 'Your latest HIV test is negative, but a recent exposure is still inside the window period (conclusive for most tests at 4-6 weeks).'
+            : 'Your practices are generally low-risk. Continue routine prevention.';
+    } else if (totalRiskScore >= 1.0 && totalRiskScore < 3.0) {
+        colorClass = 'risk-level-medium';
+        text = 'Enhanced Prevention';
         desc = latestHivTest?.result === 'negative'
-            ? 'Some encounters remain clinically relevant despite your negative HIV test because they are within the 30-day window period.'
-            : 'Recent encounters pose a significant risk. Please consult a healthcare provider for testing or PEP/PrEP options immediately.';
+            ? 'You have newer encounters after your latest negative HIV test. Most 4th-gen tests are conclusive at 4 weeks, but rapid tests may need 12 weeks.'
+            : "You've logged encounters that warrant enhanced prevention. Consider PrEP and regular screening.";
+    } else if (totalRiskScore >= 3.0) {
+        colorClass = 'risk-level-high';
+        text = 'Urgent Action';
+        desc = latestHivTest?.result === 'negative'
+            ? 'High-risk encounters remain clinically relevant despite your negative test due to the window period (up to 12 weeks for rapid tests).'
+            : 'Recent encounters pose a substantial risk. Consult a healthcare provider for testing or PEP/PrEP options immediately.';
     } else if (latestHivTest?.result === 'negative' && windowedEncounters.length === 0) {
-        desc = 'Your latest HIV test is negative, and no newer or window-period encounters are currently driving risk.';
+        desc = 'Your latest HIV test is negative, and no newer encounters are currently driving your clinical recommendation.';
     }
 
-    riskMeter.parentElement.classList.remove('risk-level-low', 'risk-level-medium', 'risk-level-high');
-    riskMeter.parentElement.classList.add(colorClass);
+    // Update UI
+    statusDot.className = 'status-dot';
+    if (colorClass === 'risk-level-low') statusDot.classList.add('routine');
+    else if (colorClass === 'risk-level-medium') statusDot.classList.add('enhanced');
+    else if (colorClass === 'risk-level-high') statusDot.classList.add('urgent');
 
-    riskMeter.style.strokeDasharray = `${percent}, 100`;
     riskText.textContent = text;
     riskDesc.textContent = desc;
+}
+
+function getRiskBadge(score) {
+    if (score === 0) return '<span class="encounter-risk-badge badge-low">Negligible</span>';
+    if (score < 1.0) return '<span class="encounter-risk-badge badge-low">Routine</span>';
+    if (score < 3.0) return '<span class="encounter-risk-badge badge-medium">Enhanced</span>';
+    return '<span class="encounter-risk-badge badge-high">Urgent</span>';
 }
 
 function renderEncounters() {
@@ -1352,13 +1238,13 @@ function renderEncounters() {
         if (state.profile.onPrep) actRiskScore *= 0.01;
 
         if (actRiskScore === 0) {
-            riskBadge = `<span class="encounter-risk-badge badge-low">No/Low Risk</span>`;
-        } else if (actRiskScore < 20) {
-            riskBadge = `<span class="encounter-risk-badge badge-low">Low Risk</span>`;
-        } else if (actRiskScore < 60) {
-            riskBadge = `<span class="encounter-risk-badge badge-medium">Mod Risk</span>`;
+            riskBadge = `<span class="encounter-risk-badge badge-low">Negligible</span>`;
+        } else if (actRiskScore < 1.0) {
+            riskBadge = `<span class="encounter-risk-badge badge-low">Routine</span>`;
+        } else if (actRiskScore < 3.0) {
+            riskBadge = `<span class="encounter-risk-badge badge-medium">Enhanced</span>`;
         } else {
-            riskBadge = `<span class="encounter-risk-badge badge-high">High Risk</span>`;
+            riskBadge = `<span class="encounter-risk-badge badge-high">Urgent</span>`;
         }
 
         const actLabels = {
@@ -1417,13 +1303,6 @@ function renderEncounters() {
             document.getElementById('partner-status').value = enc.partnerStatus;
             document.getElementById('partner-gender').value = enc.partnerGender || 'cis_male';
             document.getElementById('partner-sti').value = enc.partnerSti || 'unknown';
-            
-            if (enc.partnerStatus.includes('positive')) {
-                partnerPrepGroup.style.display = 'none';
-            } else {
-                partnerPrepGroup.style.display = 'block';
-                document.getElementById('partner-prep').value = enc.partnerPrep;
-            }
             
             document.getElementById('act-type').value = enc.actType;
             document.getElementById('condom-use').value = enc.condomUse;

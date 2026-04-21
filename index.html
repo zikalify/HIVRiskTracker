@@ -34,24 +34,36 @@
 
         <section class="risk-dashboard padding-x padding-y">
             <div class="glass-card risk-card">
-                <h2>Current Risk Assessment</h2>
-                <div class="risk-meter-container">
-                    <svg viewBox="0 0 36 36" class="circular-chart">
-                        <path class="circle-bg"
-                            d="M18 2.0845
-                            a 15.9155 15.9155 0 0 1 0 31.831
-                            a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <path class="circle-fill risk-indicator-path"
-                            stroke-dasharray="0, 100"
-                            d="M18 2.0845
-                            a 15.9155 15.9155 0 0 1 0 31.831
-                            a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <text x="18" y="20.35" class="risk-percentage">Low</text>
-                    </svg>
+                <h2>Clinical Recommendation</h2>
+                <div class="status-indicator-container">
+                    <span id="status-dot" class="status-dot routine"></span>
+                    <span id="risk-percentage" class="status-text">Routine</span>
                 </div>
-                <p id="risk-description" class="risk-description">You are taking excellent precautions. Continue your current practices.</p>
+                <p id="risk-description" class="risk-description">Your history suggests routine care. Keep up your current prevention habits.</p>
+                
+                <div class="recommendation-key">
+                    <div class="key-item">
+                        <span class="key-dot routine"></span>
+                        <div class="key-content">
+                            <strong>Routine</strong>
+                            <span>Standard annual testing and baseline prevention.</span>
+                        </div>
+                    </div>
+                    <div class="key-item">
+                        <span class="key-dot enhanced"></span>
+                        <div class="key-content">
+                            <strong>Enhanced</strong>
+                            <span>Consider PrEP and 3-6 month testing due to ongoing exposure.</span>
+                        </div>
+                    </div>
+                    <div class="key-item">
+                        <span class="key-dot urgent"></span>
+                        <div class="key-content">
+                            <strong>Urgent</strong>
+                            <span>Immediate clinical consultation for PEP or acute risk testing.</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="personal-guidance-card" class="glass-card guidance-card" style="margin-top: 20px;">
                 <h3>Personal Guidance</h3>
@@ -90,11 +102,11 @@
                     <div class="form-group">
                         <label>Sex/Gender Identity</label>
                         <select id="user-gender">
-                            <option value="cis_male">Cisgender Men</option>
-                            <option value="cis_female">Cisgender Women</option>
-                            <option value="trans_female">Transgender Women</option>
-                            <option value="trans_male">Transgender Men</option>
-                            <option value="non_binary">Non-binary / Others</option>
+                            <option value="cis_male">Cisgender Man</option>
+                            <option value="cis_female">Cisgender Woman</option>
+                            <option value="trans_female">Transgender Woman</option>
+                            <option value="trans_male">Transgender Man</option>
+                            <option value="non_binary">Non-binary / Other</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -142,6 +154,11 @@
                             <span>Post-Exposure Prophylaxis after a possible HIV exposure.</span>
                         </div>
                     </div>
+                    <div id="pep-date-group" class="form-group" style="display: none; margin-top: 10px; padding-left: 60px;">
+                        <label>PEP Start Date</label>
+                        <input type="date" id="user-pep-start">
+                        <p class="test-disclaimer">WHO guidance is a 28-day course. Knowing your start date helps track when to transition to follow-up testing or PrEP.</p>
+                    </div>
                     <div class="toggle-group">
                         <label class="toggle-switch">
                             <input type="checkbox" id="user-hep-b-vax">
@@ -174,6 +191,16 @@
                         <div class="toggle-text">
                             <strong>I have an active STI</strong>
                             <span>Untreated sexually transmitted infection.</span>
+                        </div>
+                    </div>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-new-partners">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I have new or changing partners</strong>
+                            <span>More than one partner over time, or a new partner whose infection status may be unknown.</span>
                         </div>
                     </div>
                     <div class="toggle-group">
@@ -299,11 +326,11 @@
                     <div class="form-group">
                         <label>Partner's Identity</label>
                         <select id="partner-gender" required>
-                            <option value="cis_male">Cisgender Men</option>
-                            <option value="cis_female">Cisgender Women</option>
-                            <option value="trans_female">Transgender Women</option>
-                            <option value="trans_male">Transgender Men</option>
-                            <option value="non_binary">Non-binary / Others</option>
+                            <option value="cis_male">Cisgender Man</option>
+                            <option value="cis_female">Cisgender Woman</option>
+                            <option value="trans_female">Transgender Woman</option>
+                            <option value="trans_male">Transgender Man</option>
+                            <option value="non_binary">Non-binary / Other</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -313,15 +340,6 @@
                             <option value="negative">Confirmed Negative</option>
                             <option value="positive_undetectable">Positive (Undetectable / U=U)</option>
                             <option value="positive_detectable">Positive (Detectable / Not on Treatment)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group" id="partner-prep-group">
-                        <label>Is Partner on PrEP?</label>
-                        <select id="partner-prep">
-                            <option value="unknown">I don't know</option>
-                            <option value="yes">Yes</option>
-                            <option value="no">No</option>
                         </select>
                     </div>
 
