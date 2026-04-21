@@ -6,6 +6,7 @@ let state = {
         role: 'versatile',
         onPrep: false,
         onPep: false,
+        hepBVaccinated: false,
         circumcised: false,
         sti: false,
         pwid: false,
@@ -109,6 +110,7 @@ const hasSexWithToggle = document.getElementById('has-sex-with-toggle');
 const userRole = document.getElementById('user-role');
 const userPrep = document.getElementById('user-prep');
 const userPep = document.getElementById('user-pep');
+const userHepBVax = document.getElementById('user-hep-b-vax');
 const userCircumcised = document.getElementById('user-circumcised');
 const userSti = document.getElementById('user-sti');
 const userPwid = document.getElementById('user-pwid');
@@ -375,7 +377,7 @@ function getRecommendedFollowUpTests() {
     }
 
     if (sexualExposure || needleExposure) {
-        if (shouldRetestAfterEncounter('hep_b')) {
+        if (!state.profile.hepBVaccinated && shouldRetestAfterEncounter('hep_b')) {
             recommendations.push('Hep B');
         }
     }
@@ -560,6 +562,7 @@ function loadState() {
     userRole.value = state.profile.role || 'versatile';
     userPrep.checked = state.profile.onPrep || false;
     userPep.checked = state.profile.onPep || false;
+    userHepBVax.checked = state.profile.hepBVaccinated || false;
     userCircumcised.checked = state.profile.circumcised || false;
     userSti.checked = state.profile.sti || false;
     userPwid.checked = state.profile.pwid || false;
@@ -607,6 +610,7 @@ function setupEventListeners() {
         }
         saveState();
     });
+    userHepBVax.addEventListener('change', (e) => { state.profile.hepBVaccinated = e.target.checked; saveState(); });
     userCircumcised.addEventListener('change', (e) => { state.profile.circumcised = e.target.checked; recalculateRiskHistory(); saveState(); });
     userSti.addEventListener('change', (e) => { state.profile.sti = e.target.checked; recalculateRiskHistory(); saveState(); });
     userPwid.addEventListener('change', (e) => { state.profile.pwid = e.target.checked; recalculateRiskHistory(); saveState(); });
@@ -1147,6 +1151,18 @@ function updateGuidance() {
         }
     } else if (latestHivTest?.result !== 'positive') {
         level3.push('<li><strong style="color:var(--success-color)">On PrEP:</strong> WHO recommends PrEP as an additional prevention choice for people at substantial HIV risk. Keep taking it consistently, and remember condoms and safer injection practices still matter for protection against other STIs and blood-borne infections.</li>');
+    }
+
+    const shouldSuggestHepBVaccine = !state.profile.hepBVaccinated && (
+        state.profile.pwid ||
+        effectiveHasSexWith.length > 0 ||
+        state.encounters.length > 0
+    );
+
+    if (shouldSuggestHepBVaccine) {
+        level3.push('<li><strong style="color:var(--accent-color)">Hep B Vaccine:</strong> WHO recommends hepatitis B vaccination for higher-risk groups, including people with multiple sexual partners and people who inject drugs. If you have not had the vaccine, ask a clinician or vaccination service about getting the full series.</li>');
+    } else if (state.profile.hepBVaccinated) {
+        level3.push('<li><strong style="color:var(--success-color)">Hep B Vaccine Logged:</strong> You marked that you have had the hepatitis B vaccine, so routine follow-up can focus on your other logged infections and exposures.</li>');
     }
 
     if (state.profile.pwid) {
