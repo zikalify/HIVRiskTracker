@@ -8,6 +8,7 @@ let state = {
         onPep: false,
         pepStartDate: null,
         hepBVaccinated: false,
+        mpoxVaccinated: false,
         circumcised: false,
         sti: false,
         newPartners: false,
@@ -38,7 +39,8 @@ const TEST_TYPE_LABELS = {
     chlamydia: 'Chlamydia',
     syphilis: 'Syphilis',
     hep_b: 'Hep B',
-    hep_c: 'Hep C'
+    hep_c: 'Hep C',
+    mpox: 'Mpox'
 };
 
 const STI_TEST_TYPES = ['gonorrhea', 'chlamydia', 'syphilis'];
@@ -83,6 +85,12 @@ const TEST_RESULT_OPTIONS = {
         { value: 'positive', label: 'Positive' },
         { value: 'pending', label: 'Pending' },
         { value: 'inconclusive', label: 'Inconclusive' }
+    ],
+    mpox: [
+        { value: 'negative', label: 'Negative' },
+        { value: 'positive', label: 'Positive' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'inconclusive', label: 'Inconclusive' }
     ]
 };
 
@@ -115,6 +123,7 @@ const userPep = document.getElementById('user-pep');
 const userPepStart = document.getElementById('user-pep-start');
 const pepDateGroup = document.getElementById('pep-date-group');
 const userHepBVax = document.getElementById('user-hep-b-vax');
+const userMpoxVax = document.getElementById('user-mpox-vax');
 const userCircumcised = document.getElementById('user-circumcised');
 const userSti = document.getElementById('user-sti');
 const userNewPartners = document.getElementById('user-new-partners');
@@ -137,6 +146,7 @@ const latestChlamydiaDisplay = document.getElementById('latest-chlamydia-display
 const latestSyphilisDisplay = document.getElementById('latest-syphilis-display');
 const latestHepBDisplay = document.getElementById('latest-hep-b-display');
 const latestHepCDisplay = document.getElementById('latest-hep-c-display');
+const latestMpoxDisplay = document.getElementById('latest-mpox-display');
 const testTypeSelect = document.getElementById('test-type-select');
 const logTestDateInput = document.getElementById('log-test-date');
 const testResultSelect = document.getElementById('test-result-select');
@@ -182,6 +192,7 @@ function ensureStateShape() {
     if (!state.encounters) state.encounters = [];
     if (!state.tests) state.tests = [];
     if (!state.settings) state.settings = { remindersEnabled: false, lastReminderDate: null };
+    if (state.profile.mpoxVaccinated === undefined) state.profile.mpoxVaccinated = false;
 }
 
 function migrateLegacyState() {
@@ -296,7 +307,7 @@ function getCurrentHivRiskContext() {
 
     if (latestHivTest.result === 'negative') {
         const cutoff = new Date(latestHivTest.date);
-        cutoff.setDate(cutoff.getDate() - 30);
+        cutoff.setDate(cutoff.getDate() - 90); // 90-day window to account for rapid tests
 
         const relevantEncounters = state.encounters.filter(enc => new Date(enc.date) >= cutoff);
         const historicalEncounters = state.encounters.filter(enc => new Date(enc.date) < cutoff);
@@ -389,7 +400,8 @@ const WHO_TESTING_WINDOWS = {
     'chlamydia': 7, // 2-7 days  
     'syphilis': 42, // 3-6 weeks
     'hep_b': 84, // 4-12 weeks
-    'hep_c': 84 // 4-12 weeks
+    'hep_c': 180, // 6 months for antibody tests per WHO
+    'mpox': 21 // symptom onset window
 };
 
 function getTestingTimingAdvice(recommendedTests, latestEncounterDate) {
@@ -548,6 +560,17 @@ function getRecommendedFollowUpTests() {
                 recommendations.push('Hep C');
             }
         }
+
+        // Mpox — PCR only if symptomatic AND recent skin-to-skin exposure AND unvaccinated
+        if (!state.profile.mpoxVaccinated && (isUserInKeyNetwork || state.profile.newPartners)) {
+            const hasMpoxRelevantExposure = state.encounters.some(enc => {
+                const daysSince = Math.floor((new Date() - new Date(enc.date)) / (1000 * 60 * 60 * 24));
+                return daysSince <= 21 && enc.actType !== 'receiving_oral';
+            });
+            if (hasMpoxRelevantExposure) {
+                recommendations.push('Mpox (PCR if symptomatic — rash, lesions, or fever)');
+            }
+        }
     }
 
     return [...new Set(recommendations)];
@@ -564,6 +587,8 @@ function populateTestResultOptions() {
         testResultHelp.textContent = 'Use this for HIV-specific results so the dashboard can react to negative, positive, pending, or inconclusive outcomes.';
     } else if (STI_TEST_TYPES.includes(type)) {
         testResultHelp.textContent = `Log ${TEST_TYPE_LABELS[type]} separately so the app can track follow-up, treatment, and routine screening based on the actual infection involved.`;
+    } else if (type === 'mpox') {
+        testResultHelp.textContent = 'Log mpox PCR results here. A positive result means you should isolate and avoid skin-to-skin contact until all lesions have healed.';
     } else {
         testResultHelp.textContent = `Log ${TEST_TYPE_LABELS[type]} results separately so the app can reflect hepatitis follow-up without mixing it into HIV or bacterial STI guidance.`;
     }
@@ -578,6 +603,7 @@ function renderTestingUI() {
     latestSyphilisDisplay.textContent = formatTestSummary(latestTests.syphilis) || 'No result logged';
     latestHepBDisplay.textContent = formatTestSummary(latestTests.hep_b) || (state.profile.hepBVaccinated ? 'Vaccinated' : 'No result logged');
     latestHepCDisplay.textContent = formatTestSummary(latestTests.hep_c) || 'No result logged';
+    latestMpoxDisplay.textContent = formatTestSummary(latestTests.mpox) || (state.profile.mpoxVaccinated ? 'Vaccinated' : 'No result logged');
 
     const sortedTests = sortTestsDescending(state.tests);
     btnClearTestHistory.style.display = sortedTests.length ? 'inline-flex' : 'none';
@@ -759,6 +785,7 @@ function loadState() {
     userPepStart.value = state.profile.pepStartDate || '';
     pepDateGroup.style.display = userPep.checked ? 'block' : 'none';
     userHepBVax.checked = state.profile.hepBVaccinated || false;
+    userMpoxVax.checked = state.profile.mpoxVaccinated || false;
     userCircumcised.checked = state.profile.circumcised || false;
     userSti.checked = state.profile.sti || false;
     userNewPartners.checked = state.profile.newPartners || false;
@@ -839,6 +866,7 @@ function setupEventListeners() {
         saveState();
     });
     userHepBVax.addEventListener('change', (e) => { state.profile.hepBVaccinated = e.target.checked; saveState(); });
+    userMpoxVax.addEventListener('change', (e) => { state.profile.mpoxVaccinated = e.target.checked; saveState(); });
     userCircumcised.addEventListener('change', (e) => { state.profile.circumcised = e.target.checked; recalculateRiskHistory(); saveState(); });
     userSti.addEventListener('change', (e) => { state.profile.sti = e.target.checked; recalculateRiskHistory(); saveState(); });
     userNewPartners.addEventListener('change', (e) => { state.profile.newPartners = e.target.checked; saveState(); });
@@ -1081,25 +1109,27 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
 
     // Condoms are highly effective but not 100% - UN/WHO aligned reduction
     if (condomUse === 'yes' && riskCategory > 0) {
-        // WHO: Condoms reduce HIV transmission by 80-95%, STIs by varying amounts
+        // WHO systematic reviews support ~70-75% reduction for anal/vaginal sex
         if (actType === 'receptive_anal') {
-            riskCategory *= 0.2; // 80% reduction for highest risk act
+            riskCategory *= 0.25; // 75% reduction for highest risk act
         } else if (actType === 'insertive_anal' || actType === 'receptive_vaginal') {
-            riskCategory *= 0.15; // 85% reduction for moderate risk acts
+            riskCategory *= 0.20; // 80% reduction for moderate risk acts
         } else {
-            riskCategory *= 0.1; // 90% reduction for lower risk acts
+            riskCategory *= 0.15; // 85% reduction for lower risk acts
         }
-    } else if (condomUse === 'broke' && riskCategory > 0) {
-        riskCategory *= 1.2; // WHO: 20% increase due to failure awareness
+    } else if (condomUse === 'broke') {
+        // Broken condom = equivalent to unprotected sex, no protective reduction
+        // No additional penalty beyond baseline risk
     }
 
     // Multipliers for clinical context
     let multiplier = 1.0;
     
     // Circumcision reduces acquisition risk for men during insertive vaginal sex (WHO)
+    // WHO RCT evidence is exclusively for heterosexual insertive vaginal sex
     if (state.profile.gender === 'cis_male' && state.profile.circumcised && 
-        (actType === 'insertive_vaginal' || actType === 'insertive_anal')) {
-        multiplier *= 0.4; // WHO: ~60% reduction for both vaginal and anal insertive sex
+        actType === 'insertive_vaginal') {
+        multiplier *= 0.4; // WHO: ~60% reduction for insertive vaginal sex
     }
 
     if (partnerStatus === 'positive_detectable') multiplier *= 1.5;
@@ -1224,6 +1254,13 @@ function updateGuidance() {
         }
     });
 
+    const mpoxTest = latestTests.mpox;
+    if (mpoxTest?.result === 'positive') {
+        level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;"><strong style="color:var(--danger-color)">Positive Mpox Result Logged:</strong> Isolate to avoid spreading mpox to others. Contact a healthcare provider for wound care guidance and to notify recent close contacts. Avoid skin-to-skin contact until all lesions have fully healed.</li>`);
+    } else if (mpoxTest?.result === 'pending' || mpoxTest?.result === 'inconclusive') {
+        level2.push(`<li><strong style="color:var(--warning-color)">Mpox Result Pending:</strong> Avoid close physical contact until your result is confirmed. Follow up with your provider promptly.</li>`);
+    }
+
     relevantEncounters.forEach(enc => {
         const encDate = new Date(enc.date);
         const diffHours = (now - encDate) / (1000 * 60 * 60);
@@ -1314,6 +1351,11 @@ function updateGuidance() {
 
     if (shouldSuggestHepBVaccine) {
         level3.push('<li><strong style="color:var(--accent-color)">Hep B Vaccine:</strong> WHO recommends hepatitis B vaccination for higher-risk groups, including people with multiple sexual partners and people who inject drugs. If you have not had the vaccine, ask a clinician or vaccination service about getting the full series.</li>');
+    }
+
+    const shouldSuggestMpoxVaccine = !state.profile.mpoxVaccinated && (isUserInKeyNetwork || state.profile.newPartners);
+    if (shouldSuggestMpoxVaccine) {
+        level3.push('<li><strong style="color:var(--accent-color)">Mpox Vaccine:</strong> WHO recommends mpox vaccination for MSM and people with multiple partners due to ongoing PHEIC. Check with local health services about vaccine availability and eligibility in your area.</li>');
     }
 
     if (state.profile.pwid) {

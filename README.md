@@ -9,7 +9,7 @@ A privacy-first, offline-ready Progressive Web App (PWA) side project for person
 - **Risk Tracking**: Records encounters and calculates basic risk estimates based on partner status, gender identity, act type, and preventative measures (PrEP/Condoms/Circumcision) using publicly available health information.
 - **Privacy First**: 100% serverless. Your data never leaves your device. All information is stored locally in your browser's `localStorage`.
 - **Personal Reminders**: Provides general health reminders and basic guidance based on your logged information. This is not medical advice.
-- **Comprehensive Health Tracking**: Log and manage test results for HIV, Gonorrhea, Chlamydia, Syphilis, Hepatitis B & C with detailed result tracking and history.
+- **Comprehensive Health Tracking**: Log and manage test results for HIV, Gonorrhea, Chlamydia, Syphilis, Hepatitis B & C, and Mpox with detailed result tracking and history.
 - **Clinical Factor Monitoring**: Track STI status, new partners, injection drug use, and other clinical factors that affect risk assessment.
 - **PEP Management**: Track Post-Exposure Prophylaxis with start date monitoring and 28-day course guidance.
 - **Data Portability**: Full Export/Import functionality. Move your health history between devices securely via JSON backups with validation.

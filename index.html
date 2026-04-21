@@ -169,6 +169,16 @@
                             <span>Vaccination helps prevent hepatitis B infection.</span>
                         </div>
                     </div>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-mpox-vax">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I have had the mpox vaccine</strong>
+                            <span>Vaccination helps prevent mpox infection.</span>
+                        </div>
+                    </div>
                     <div class="toggle-group" id="circumcision-group" style="display: none;">
                         <label class="toggle-switch">
                             <input type="checkbox" id="user-circumcised">
@@ -236,6 +246,7 @@
                             <p>Syphilis: <strong id="latest-syphilis-display">No result logged</strong></p>
                             <p>Hep B: <strong id="latest-hep-b-display">No result logged</strong></p>
                             <p>Hep C: <strong id="latest-hep-c-display">No result logged</strong></p>
+                            <p>Mpox: <strong id="latest-mpox-display">No result logged</strong></p>
                         </div>
                     </div>
                     <div class="form-group" style="margin-top:20px;">
@@ -248,6 +259,7 @@
                                 <option value="syphilis">Syphilis</option>
                                 <option value="hep_b">Hep B</option>
                                 <option value="hep_c">Hep C</option>
+                                <option value="mpox">Mpox</option>
                             </select>
                             <input type="date" id="log-test-date">
                             <select id="test-result-select"></select>
