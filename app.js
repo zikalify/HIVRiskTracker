@@ -330,11 +330,52 @@ function hasNeedleExposure(encounters = state.encounters) {
     return encounters.some(enc => enc.actType === 'shared_needles');
 }
 
-function getLatestEncounterDate(encounters = state.encounters) {
-    if (!encounters.length) return null;
-    return encounters
+function getLatestEncounterDate() {
+    if (!state.encounters.length) return null;
+    return state.encounters
         .map(enc => new Date(enc.date))
         .sort((a, b) => b - a)[0];
+}
+
+function getEarliestUntestedEncounterDate() {
+    const latestTests = getLatestTestsByType();
+    const now = new Date();
+    
+    // Find encounters that haven't been adequately tested
+    const untestedEncounters = state.encounters.filter(enc => {
+        // Check if any test covers this encounter
+        const encounterDate = new Date(enc.date);
+        const localEncounterDate = new Date(encounterDate.getFullYear(), encounterDate.getMonth(), encounterDate.getDate());
+        
+        for (const [testType, test] of Object.entries(latestTests)) {
+            if (!test) continue;
+            
+            const testDate = new Date(test.date);
+            const localTestDate = new Date(testDate.getFullYear(), testDate.getMonth(), testDate.getDate());
+            
+            // If test was done after encounter and within the testing window
+            if (localTestDate >= localEncounterDate) {
+                const daysBetween = Math.floor((localTestDate - localEncounterDate) / (1000 * 60 * 60 * 24));
+                const windowDays = WHO_TESTING_WINDOWS[testType] || 42;
+                
+                if (daysBetween <= windowDays && isResolvedTestResult(test.result)) {
+                    // This encounter was adequately tested
+                    return false;
+                }
+            }
+        }
+        
+        // Check if encounter is too old to matter (beyond testing windows)
+        const daysSinceEncounter = Math.floor((now - encounterDate) / (1000 * 60 * 60 * 24));
+        return daysSinceEncounter <= 84; // Hep C window is longest at 12 weeks
+    });
+    
+    if (untestedEncounters.length === 0) return null;
+    
+    // Return the earliest untested encounter
+    return untestedEncounters
+        .map(enc => new Date(enc.date))
+        .sort((a, b) => a - b)[0];
 }
 
 function isResolvedTestResult(result) {
@@ -455,31 +496,50 @@ function getRecommendedFollowUpTests() {
     }
 
     if (sexualExposure) {
-        ['gonorrhea', 'chlamydia', 'syphilis'].forEach(type => {
-            if (shouldRetestAfterEncounter(type)) {
-                recommendations.push(TEST_TYPE_LABELS[type]);
-            }
+        // Check if there are any high-risk encounters that warrant testing
+        const hasHighRiskEncounters = state.encounters.some(enc => {
+            const hasHivRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
+            const condomUsed = enc.condomUse === 'yes';
+            const isHighRiskAct = ['receptive_anal', 'insertive_anal'].includes(enc.actType);
+            
+            // Only recommend testing if: no condom OR unknown/positive status OR high-risk act
+            return !condomUsed || hasHivRisk || isHighRiskAct;
         });
+        
+        if (hasHighRiskEncounters) {
+            ['gonorrhea', 'chlamydia', 'syphilis'].forEach(type => {
+                if (shouldRetestAfterEncounter(type)) {
+                    recommendations.push(TEST_TYPE_LABELS[type]);
+                }
+            });
+        }
     }
 
     if (sexualExposure || needleExposure) {
         const isHighRisk = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
         
-        // Hep C for PWID and MSM/Trans high-risk networks (WHO)
-        if (state.profile.pwid || isUserInKeyNetwork) {
-            if (shouldRetestAfterEncounter('hep_c')) {
-                recommendations.push('Hep C');
-            }
-        }
-
-        // Even if vaccinated, high-risk groups may need baseline or occasional Hep B screening per WHO
-        if (!state.profile.hepBVaccinated) {
+        // Hep B screening - more targeted approach to reduce overkill
+        const hasHepBRiskFactors = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
+        const hasUnprotectedSex = state.encounters.some(enc => enc.condomUse !== 'yes');
+        
+        if (!state.profile.hepBVaccinated && (hasHepBRiskFactors || hasUnprotectedSex)) {
             recommendations.push('Hep B');
-        } else if (isHighRisk) {
+        } else if (!state.profile.hepBVaccinated && hasReceptiveAnalWithRisk) {
+            // Receptive anal sex with unknown status partners warrants Hep B screening
+            recommendations.push('Hep B');
+        } else if (isHighRisk && !state.profile.hepBVaccinated) {
             // If vaccinated but high risk, only recommend if they've NEVER logged a result or it's very old
             const latestHepB = latestTests.hep_b;
             if (!latestHepB) {
                 recommendations.push('Hep B (Baseline screening recommended for high-risk groups)');
+            }
+        }
+
+        // Hep C primarily for PWID and MSM/Trans high-risk networks (WHO focus)
+        // Less emphasis on heterosexual anal sex for Hep C transmission
+        if (state.profile.pwid || isUserInKeyNetwork) {
+            if (shouldRetestAfterEncounter('hep_c')) {
+                recommendations.push('Hep C');
             }
         }
 
@@ -790,6 +850,7 @@ function setupEventListeners() {
             state.profile.hasSexWith = Array.from(userHasSexWithCheckboxes)
                 .filter(c => c.checked)
                 .map(c => c.value);
+            updateDropdownText();
             recalculateRiskHistory();
             saveState();
         });
@@ -965,30 +1026,69 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
     // 0: Negligible, 1: Low, 2: Moderate, 3: High
     let riskCategory = 0;
 
+    // Consider biological reality for HIV transmission risk
+    const userGender = state.profile.gender || 'cis_male';
+    const isUserMale = userGender === 'cis_male' || userGender === 'trans_male';
+    const isUserFemale = userGender === 'cis_female' || userGender === 'trans_female';
+    const isPartnerMale = partnerGender === 'cis_male' || partnerGender === 'trans_male';
+    const isPartnerFemale = partnerGender === 'cis_female' || partnerGender === 'trans_female';
+    
     switch(actType) {
-        case 'receptive_anal':
         case 'shared_needles':
-            riskCategory = 3; 
+            riskCategory = 3; // Always high risk
+            break;
+        case 'receptive_anal':
+            // Only high risk if partner could biologically transmit HIV
+            if (isPartnerMale || partnerStatus === 'positive_detectable') {
+                riskCategory = 3;
+            } else {
+                riskCategory = 0; // No biological HIV risk (e.g., woman with strapon or unknown status female)
+            }
             break;
         case 'insertive_anal':
+            // Risk depends on receptive partner's status
+            if (partnerStatus === 'positive_detectable' || partnerStatus === 'unknown') {
+                riskCategory = 2;
+            } else {
+                riskCategory = 0.5; // Very low risk with negative partner
+            }
+            break;
         case 'receptive_vaginal':
-            riskCategory = 2;
+            // Risk depends on insertive partner's status
+            if (isUserMale && (partnerStatus === 'positive_detectable' || partnerStatus === 'unknown')) {
+                riskCategory = 2;
+            } else if (partnerStatus === 'positive_detectable' || partnerStatus === 'unknown') {
+                riskCategory = 1; // Lower risk for female recipients
+            } else {
+                riskCategory = 0.5;
+            }
             break;
         case 'insertive_vaginal':
-            riskCategory = 1;
+            if (partnerStatus === 'positive_detectable' || partnerStatus === 'unknown') {
+                riskCategory = 1;
+            } else {
+                riskCategory = 0.5;
+            }
             break;
         case 'giving_oral':
-            riskCategory = 0.5;
+            riskCategory = 0.5; // Low but non-zero risk
             break;
         case 'receiving_oral':
         default:
-            riskCategory = 0;
+            riskCategory = 0; // Essentially no risk
             break;
     }
 
-    // Condoms are highly effective
+    // Condoms are highly effective but not 100% - UN/WHO aligned reduction
     if (condomUse === 'yes' && riskCategory > 0) {
-        riskCategory = 0.5; // Reduces any higher risk to very low
+        // WHO: Condoms reduce HIV transmission by 80-95%, STIs by varying amounts
+        if (actType === 'receptive_anal') {
+            riskCategory *= 0.2; // 80% reduction for highest risk act
+        } else if (actType === 'insertive_anal' || actType === 'receptive_vaginal') {
+            riskCategory *= 0.15; // 85% reduction for moderate risk acts
+        } else {
+            riskCategory *= 0.1; // 90% reduction for lower risk acts
+        }
     } else if (condomUse === 'broke' && riskCategory > 0) {
         riskCategory *= 1.2; // WHO: 20% increase due to failure awareness
     }
@@ -1020,8 +1120,27 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
     return riskCategory * multiplier;
 }
 
+function hasSexualExposure(encounters = state.encounters) {
+    return encounters && encounters.length > 0;
+}
+
+function hasNeedleExposure(encounters = state.encounters) {
+    return encounters && encounters.some(enc => enc.actType === 'shared_needles');
+}
+
+function getLatestEncounterDate() {
+    if (!state.encounters || state.encounters.length === 0) return null;
+    
+    const sortedEncounters = state.encounters.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return new Date(sortedEncounters[0].date);
+}
+
 function updateDropdownText() {
     const selected = Array.from(userHasSexWithCheckboxes).filter(cb => cb.checked);
+    const hasSexWithToggle = document.getElementById('has-sex-with-toggle');
+    
+    if (!hasSexWithToggle) return;
+    
     if (selected.length === 0) {
         hasSexWithToggle.innerHTML = `Select Partners <span class="material-symbols-rounded">expand_more</span>`;
     } else if (selected.length === 1) {
@@ -1047,6 +1166,9 @@ function updateGuidance() {
     const latestEncounterDate = getLatestEncounterDate();
     const latestHivTest = latestTests.hiv;
     const { relevantEncounters, historicalEncounters, windowedEncounters } = getCurrentHivRiskContext();
+
+    // Calculate total risk score for guidance decisions
+    const totalRiskScore = relevantEncounters.reduce((total, enc) => total + (enc.riskScore || 0), 0);
 
     let isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg));
     if (uGender.startsWith('trans_')) isUserInKeyNetwork = true;
@@ -1113,10 +1235,23 @@ function updateGuidance() {
         if (latestHivTest?.result === 'positive') return;
 
         // Emergency PEP logic (within 72 hours) - WHO aligned
-        const isHighRiskExposure = enc.actType === 'receptive_anal' || enc.actType === 'shared_needles';
+        // Only recommend PEP when there's actual biological HIV risk
+        const hasHivRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
+        
+        // Consider biological reality for PEP recommendations
+        const isPartnerMale = (enc.partnerGender === 'cis_male' || enc.partnerGender === 'trans_male');
+        const isPartnerFemale = (enc.partnerGender === 'cis_female' || enc.partnerGender === 'trans_female');
+        
+        // No biological HIV risk: woman pegging man (receptive anal with female partner)
+        const hasBiologicalRisk = !((enc.actType === 'receptive_anal' && isPartnerFemale) ||
+                                   (enc.actType === 'receptive_vaginal' && isPartnerFemale));
+        
+        const isHighRiskExposure = hasHivRisk && hasBiologicalRisk && 
+                                  (enc.actType === 'receptive_anal' || enc.actType === 'shared_needles');
         const isKnownPositivePartner = enc.partnerStatus === 'positive_detectable';
-        const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
-                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes');
+        const isModerateRiskWithFactors = hasHivRisk && hasBiologicalRisk && 
+                                          (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
+                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes' || enc.condomUse !== 'yes');
         
         if (diffHours <= 72 && (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors)) {
             let pepReason = '';
@@ -1215,7 +1350,8 @@ function updateGuidance() {
 
         // WHO-aligned follow-up: persist until all recommended tests are completed
         if (encountersSinceTest > 0 || recommendedFollowUpTests.length > 0) {
-            const timingAdvice = getTestingTimingAdvice(recommendedFollowUpTests, latestEncounterDate);
+            const earliestUntestedDate = getEarliestUntestedEncounterDate();
+            const timingAdvice = getTestingTimingAdvice(recommendedFollowUpTests, earliestUntestedDate || latestEncounterDate);
             const followUpList = recommendedFollowUpTests.length ? `: ${recommendedFollowUpTests.join(', ')}` : '';
             const message = recommendedFollowUpTests.length > 0 
                 ? `You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early${followUpList}.`
@@ -1224,7 +1360,45 @@ function updateGuidance() {
             let fullMessage = `<li><strong>Follow-Up:</strong> ${message}`;
             
             if (timingAdvice && timingAdvice.length > 0) {
-                fullMessage += `<br><strong>Testing Timing:</strong>`;
+                // Determine appropriate testing frequency based on risk level
+                const isRoutineRisk = totalRiskScore >= 0 && totalRiskScore < 1.0;
+                
+                // Check if testing should be recommended at regular intervals for ongoing activity
+                const hasRecentActivity = state.encounters.some(enc => {
+                    const daysSince = Math.floor((new Date() - new Date(enc.date)) / (1000 * 60 * 60 * 24));
+                    return daysSince <= 90; // Activity in last 90 days
+                });
+                
+                if (hasRecentActivity && encountersSinceTest > 0) {
+                    // Context-appropriate testing advice based on why tests are recommended
+                    if (recommendedFollowUpTests.length > 0) {
+                        // Tests are recommended due to specific exposures - focus on timing
+                        fullMessage += `<br><strong>Testing Timing:</strong> <em>Complete these tests at the optimal windows shown below for accurate detection after recent exposure.</em>`;
+                    } else {
+                        // No specific tests needed - provide routine screening guidance
+                        const uGender = state.profile.gender || 'cis_male';
+                        const hasSexWith = state.profile.hasSexWith || [];
+                        const isMSM = (uGender === 'cis_male' || uGender === 'trans_male') && 
+                                      (hasSexWith.some(p => ['cis_male', 'trans_male', 'non_binary', 'trans_female'].includes(p)));
+                        const isTransWoman = uGender === 'trans_female';
+                        const isPWID = state.profile.pwid;
+                        const hasMultiplePartners = state.profile.newPartners;
+                        
+                        let testingFrequency = '';
+                        if (isMSM || isTransWoman || isPWID) {
+                            testingFrequency = 'WHO recommends testing every 3-6 months for key populations with ongoing sexual activity.';
+                        } else if (hasMultiplePartners && !isRoutineRisk) {
+                            testingFrequency = 'WHO recommends testing every 6 months for people with multiple partners and ongoing sexual activity.';
+                        } else {
+                            testingFrequency = 'WHO recommends annual testing for routine risk individuals with ongoing sexual activity.';
+                        }
+                        
+                        fullMessage += `<br><strong>Testing Frequency:</strong> <em>${testingFrequency}</em>`;
+                    }
+                } else {
+                    fullMessage += `<br><strong>Testing Timing:</strong>`;
+                }
+                
                 timingAdvice.forEach(timing => {
                     fullMessage += `<br><span style="margin-left: 20px; display: inline-block;">• ${timing}</span>`;
                 });
@@ -1300,10 +1474,23 @@ function updateDashboard() {
     const now = new Date();
     const hasEmergencyPEPWindow = relevantEncounters.some(enc => {
         const diffHours = (now - new Date(enc.date)) / (1000 * 60 * 60);
-        const isHighRiskExposure = enc.actType === 'receptive_anal' || enc.actType === 'shared_needles';
+        // Only recommend PEP when there's actual biological HIV risk
+        const hasHivRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
+        
+        // Consider biological reality for PEP recommendations
+        const isPartnerMale = (enc.partnerGender === 'cis_male' || enc.partnerGender === 'trans_male');
+        const isPartnerFemale = (enc.partnerGender === 'cis_female' || enc.partnerGender === 'trans_female');
+        
+        // No biological HIV risk: woman pegging man (receptive anal with female partner)
+        const hasBiologicalRisk = !((enc.actType === 'receptive_anal' && isPartnerFemale) ||
+                                   (enc.actType === 'receptive_vaginal' && isPartnerFemale));
+        
+        const isHighRiskExposure = hasHivRisk && hasBiologicalRisk && 
+                                  (enc.actType === 'receptive_anal' || enc.actType === 'shared_needles');
         const isKnownPositivePartner = enc.partnerStatus === 'positive_detectable';
-        const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
-                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes');
+        const isModerateRiskWithFactors = hasHivRisk && hasBiologicalRisk && 
+                                          (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
+                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes' || enc.condomUse !== 'yes');
         
         return diffHours <= 72 && (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors);
     });
