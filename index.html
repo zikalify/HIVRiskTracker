@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HIV Risk Tracker</title>
     <meta name="description" content="Offline HIV Risk Tracking App based on WHO standards">
-    <meta name="theme-color" content="#121212">
+    <meta name="theme-color" content="#0f111a">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     
@@ -86,11 +86,11 @@
                     <div class="form-group">
                         <label>Sex/Gender Identity</label>
                         <select id="user-gender">
-                            <option value="cis_male">Cisgender Male</option>
-                            <option value="cis_female">Cisgender Female</option>
-                            <option value="trans_female">Transgender Female</option>
-                            <option value="trans_male">Transgender Male</option>
-                            <option value="non_binary">Non-binary / Other</option>
+                            <option value="cis_male">Cisgender Men</option>
+                            <option value="cis_female">Cisgender Women</option>
+                            <option value="trans_female">Transgender Women</option>
+                            <option value="trans_male">Transgender Men</option>
+                            <option value="non_binary">Non-binary / Others</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -98,11 +98,11 @@
                         <div class="custom-dropdown">
                             <button type="button" class="dropdown-toggle" id="has-sex-with-toggle">Select Partners <span class="material-symbols-rounded">expand_more</span></button>
                             <div class="dropdown-menu" id="user-has-sex-with">
-                                <label class="checkbox-label"><input type="checkbox" value="cis_male"> Cisgender Male</label>
-                                <label class="checkbox-label"><input type="checkbox" value="cis_female"> Cisgender Female</label>
-                                <label class="checkbox-label"><input type="checkbox" value="trans_female"> Transgender Female</label>
-                                <label class="checkbox-label"><input type="checkbox" value="trans_male"> Transgender Male</label>
-                                <label class="checkbox-label"><input type="checkbox" value="non_binary"> Non-binary / Other</label>
+                                <label class="checkbox-label"><input type="checkbox" value="cis_male"> Cisgender Men</label>
+                                <label class="checkbox-label"><input type="checkbox" value="cis_female"> Cisgender Women</label>
+                                <label class="checkbox-label"><input type="checkbox" value="trans_female"> Transgender Women</label>
+                                <label class="checkbox-label"><input type="checkbox" value="trans_male"> Transgender Men</label>
+                                <label class="checkbox-label"><input type="checkbox" value="non_binary"> Non-binary / Others</label>
                             </div>
                         </div>
                     </div>
@@ -247,13 +247,13 @@
                         <input type="date" id="encounter-date" required>
                     </div>
                     <div class="form-group">
-                        <label>Partner Gender</label>
+                        <label>Partner's Identity</label>
                         <select id="partner-gender" required>
-                            <option value="cis_male">Cisgender Male</option>
-                            <option value="cis_female">Cisgender Female</option>
-                            <option value="trans_female">Transgender Female</option>
-                            <option value="trans_male">Transgender Male</option>
-                            <option value="non_binary">Non-binary / Other</option>
+                            <option value="cis_male">Cisgender Men</option>
+                            <option value="cis_female">Cisgender Women</option>
+                            <option value="trans_female">Transgender Women</option>
+                            <option value="trans_male">Transgender Men</option>
+                            <option value="non_binary">Non-binary / Others</option>
                         </select>
                     </div>
                     <div class="form-group">

@@ -21,6 +21,14 @@ let state = {
 
 let editingEncounterId = null;
 
+const GENDER_LABELS = {
+    'cis_male': 'Cisgender Men',
+    'cis_female': 'Cisgender Women',
+    'trans_female': 'Transgender Women',
+    'trans_male': 'Transgender Men',
+    'non_binary': 'Non-binary / Others'
+};
+
 // DOM Elements
 const riskMeter = document.querySelector('.risk-indicator-path');
 const riskText = document.querySelector('.risk-percentage');
@@ -115,6 +123,29 @@ function isKeyPopulationEncounter(uGender, pGender) {
     if (isUserTrans && isPartnerTrans) return true;
 
     return false;
+}
+
+/**
+ * Evaluates the user's static profile against WHO "Key Population" and high-risk criteria
+ */
+function getProfileRiskFactors() {
+    const factors = [];
+    const uGender = state.profile.gender;
+    const hasSexWith = state.profile.hasSexWith || [];
+
+    // 1. MSM (Men who have sex with men)
+    const isMSM = (uGender === 'cis_male' || uGender === 'trans_male') && 
+                  (hasSexWith.some(p => ['cis_male', 'trans_male', 'non_binary', 'trans_female'].includes(p)));
+    
+    // 2. Transgender Women (Highest prevalence group globally)
+    const isTransWoman = (uGender === 'trans_female');
+
+    if (isMSM) factors.push('msm');
+    if (isTransWoman) factors.push('trans_woman');
+    if (state.profile.pwid) factors.push('pwid');
+    if (state.profile.sti) factors.push('active_sti');
+    
+    return factors;
 }
 
 function refreshApp() {
@@ -430,10 +461,17 @@ function updateGuidance() {
     const encounterPartnerGenders = state.encounters ? state.encounters.map(e => e.partnerGender) : [];
     const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
     const isVirgin = state.profile.isVirgin;
+    const profileFactors = getProfileRiskFactors();
     
     // Check if user is clinically part of a Key Population network
     let isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg));
     if (uGender.startsWith('trans_')) isUserInKeyNetwork = true;
+    
+    // WHO clinical indicators for PrEP eligibility
+    const isPrEPCandidate = profileFactors.includes('msm') || 
+                            profileFactors.includes('trans_woman') || 
+                            profileFactors.includes('pwid') || 
+                            profileFactors.includes('active_sti');
 
     // Messages organized by Priority
     let level1 = []; // Emergency (Red Box)
@@ -453,98 +491,101 @@ function updateGuidance() {
             const encIsKP = isKeyPopulationEncounter(uGender, enc.partnerGender);
             
             if (encIsKP) hasRecentKPEncounter = true;
-            if (diffHours <= 720 && enc.actType === 'receptive_anal') hasPenetrativeReceptiveRole = true;
-            if (diffHours <= 720 && enc.actType === 'receptive_vaginal') hasPenetrativeReceptiveRole = true;
+            if (diffHours <= 720 && (enc.actType === 'receptive_anal' || enc.actType === 'receptive_vaginal')) {
+                hasPenetrativeReceptiveRole = true;
+            }
             
             totalRiskScore += enc.riskScore || 0;
 
             if (diffHours <= 72 && enc.riskScore >= 20) {
                 level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
                     <strong style="color:var(--danger-color)">🚨 EMERGENCY PEP WINDOW:</strong> 
-                    You had a high-risk exposure within the last 3 days. Go to an emergency room or clinic <strong>RIGHT NOW</strong> to ask for <strong>PEP (Post-Exposure Prophylaxis)</strong>. This emergency medicine can stop HIV if started within 72 hours.
+                    You had a high-risk exposure within the last 3 days. Go to an emergency room or clinic <strong>RIGHT NOW</strong> to ask for <strong>PEP (Post-Exposure Prophylaxis)</strong>.
                 </li>`);
             } else if (diffHours <= 720 && enc.riskScore >= 20) {
-                level2.push(`<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now. A standard test is most accurate 45 days after sex, but an "RNA" test can find it in 10-14 days.</li>`);
+                level2.push(`<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now.</li>`);
             }
         });
     }
 
-    // Level 2 - Clinical Safety
-    if (state.profile.pwid) {
-        level2.push('<li><strong style="color:var(--danger-color)">Needle Safety:</strong> Sharing needles is very high risk for HIV. Please use a clean needle exchange to protect yourself and your friends.</li>');
-    }
-    if (state.profile.sti) {
-        level2.push('<li><strong style="color:var(--warning-color)">Active STI:</strong> Having an untreated STI makes it much easier for HIV to enter your body. Seek treatment right away to protect your own health and your partners.</li>');
-    }
-
-    // Level 3 - Personal & Partner Advice
-    if (!isVirgin) {
-        if (state.profile.role === 'receptive' && hasPenetrativeReceptiveRole) {
-            level3.push('<li><strong>Receiving Risk:</strong> Your recent logs include receptive penetrative sex. This role is at higher risk because your body is more exposed. Using a condom is your best protection.</li>');
-        } else if (state.profile.role === 'insertive') {
-            level3.push('<li><strong>Partner Safety:</strong> As the "insertive" partner, your personal risk is lower, but using a condom is a powerful way to keep your partners safe.</li>');
-        }
-
-        if (state.profile.onPrep) {
-            level3.push('<li><strong>On PrEP:</strong> Great job taking your daily <strong>PrEP (Pre-Exposure Prophylaxis)</strong>. Remember that while PrEP protects <em>you</em> from HIV, a condom is still needed to protect your partners from other STIs.</li>');
-        } else if (isUserInKeyNetwork && totalRiskScore >= 20) {
-            level3.push('<li><strong>Strongly check PrEP:</strong> Because of your history or profile, taking a daily <strong>PrEP (Pre-Exposure Prophylaxis)</strong> pill is highly recommended to stay HIV-free.</li>');
-        }
-
-        if (hasRecentKPEncounter) {
-            level3.push('<li><strong style="color:var(--accent-color)">Network Safety:</strong> Some of your partners are from groups where HIV is more common. Doctors recommend a full check-up every 3 months for people in these networks.</li>');
-        }
-
-        if (totalRiskScore >= 20) {
-            level3.push('<li><strong style="color:var(--accent-color)">Protect others:</strong> You have recently accumulated some risk. Using a condom with new partners ensures they stay safe while you wait for your next test result.</li>');
+    // --- PROACTIVE PROFILE-BASED ADVICE (Level 2 & 3) ---
+    
+    // PrEP Recommendation (Proactive)
+    if (!state.profile.onPrep) {
+        if (isPrEPCandidate) {
+            const factorLabels = {
+                'msm': 'Men who have sex with men (MSM)',
+                'trans_woman': 'Transgender Women',
+                'pwid': 'People who inject drugs',
+                'active_sti': 'Active STI history'
+            };
+            const displayFactors = profileFactors.map(f => factorLabels[f] || f.replace(/_/g, ' '));
+            level3.push(`<li><strong style="color:var(--accent-color)">WHO PrEP Recommendation:</strong> Based on your profile (${displayFactors.join(', ')}), daily <strong>PrEP</strong> is highly recommended. It is a powerful tool to stay HIV-free regardless of individual encounter outcomes.</li>`);
         }
     } else {
-        // Virgin-specific advice
-        if (isUserInKeyNetwork) {
-            level3.push('<li><strong>Future Protection:</strong> If you decide to become sexually active, <strong>PrEP (Pre-Exposure Prophylaxis)</strong> is a great option to discuss with a doctor once you start.</li>');
-        }
+        level3.push('<li><strong style="color:var(--success-color)">On PrEP:</strong> Great job taking your daily PrEP. Remember, while it protects you from HIV, condoms are still needed for protection against other STIs like Syphilis and Gonorrhea.</li>');
     }
 
-    // Level 4 - STI Maintenance
-    if (!isVirgin) {
+    // Specific Clinical Factors
+    if (state.profile.pwid) {
+        level2.push('<li><strong style="color:var(--danger-color)">Harm Reduction:</strong> Sharing needles is high risk. Use clean equipment every time. Look for a local "Needle Exchange" program for free, sterile supplies.</li>');
+    }
+    if (state.profile.sti) {
+        level2.push('<li><strong style="color:var(--warning-color)">Active STI:</strong> Untreated STIs cause inflammation that makes it significantly easier for HIV to enter the bloodstream. Complete your treatment before having sex again.</li>');
+    }
+    if (uGender === 'cis_male' && !state.profile.circumcised && profileHasSexWith.includes('cis_female')) {
+        level3.push('<li><strong>Circumcision:</strong> Medical male circumcision can reduce the risk of heterosexually acquired HIV infection in men by approximately 60%.</li>');
+    }
+
+    // Role-based Advice
+    if (state.profile.role === 'receptive' && (hasPenetrativeReceptiveRole || !isVirgin)) {
+        level3.push('<li><strong>Receiving Risk:</strong> Receptive penetrative sex (anal or vaginal) carries a higher biological risk. Ensure consistent condom use if not on PrEP.</li>');
+    }
+
+    // Key Population Network Advice
+    if (isUserInKeyNetwork && !isVirgin) {
+        level3.push('<li><strong style="color:var(--accent-color)">Network Safety:</strong> Since you or your partners are part of a key population, WHO recommends a full STI screening every 3 to 6 months.</li>');
+    }
+
+    // --- VIRGIN STATUS ADVICE ---
+    if (isVirgin) {
+        level3.push('<li><strong>Sexual Debut:</strong> Since you have no sexual history, your current risk is zero. This is the perfect time to establish a prevention plan (like starting PrEP) before your first encounter.</li>');
+    }
+
+    // --- STI MAINTENANCE (Level 4) ---
+    if (!isVirgin || state.encounters.length > 0) {
         let encountersSinceTest = 0;
-        if (state.encounters) {
-            const lastStiDate = state.profile.lastStiTestDate ? new Date(state.profile.lastStiTestDate) : null;
-            encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
-        }
+        const lastStiDate = state.profile.lastStiTestDate ? new Date(state.profile.lastStiTestDate) : null;
+        encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
 
         if (encountersSinceTest > 0) {
-            stiMaintenance.push(`<li><strong>STI Check:</strong> You have had <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your last full STI check. Consider a routine screening for Syphilis, Gonorrhea, and Chlamydia.</li>`);
+            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your last full STI check. Consider a routine panel.</li>`);
         }
 
-        if (isUserInKeyNetwork) {
-            const quarterlyCutoff = new Date();
-            quarterlyCutoff.setDate(quarterlyCutoff.getDate() - 90);
-            const lastStiDate = state.profile.lastStiTestDate ? new Date(state.profile.lastStiTestDate) : null;
-            if (!lastStiDate || lastStiDate < quarterlyCutoff) {
-                stiMaintenance.push('<li><strong style="color:var(--accent-color)">Screening Overdue:</strong> It has been over 3 months since your last full STI check. Regular screening is key to staying healthy in your network.</li>');
+        const quarterlyCutoff = new Date();
+        quarterlyCutoff.setDate(quarterlyCutoff.getDate() - 90);
+        if (!lastStiDate || lastStiDate < quarterlyCutoff) {
+            if (isPrEPCandidate) {
+                stiMaintenance.push('<li><strong style="color:var(--warning-color)">Overdue Screening:</strong> Quarterly screenings are the standard for PrEP users and key populations.</li>');
             }
         }
 
         const hasDisparity = encounterPartnerGenders.some(pg => pg && !profileHasSexWith.includes(pg));
         if (hasDisparity) {
-            stiMaintenance.push('<li><strong>Update Profile:</strong> You have logged partners who aren\'t in your settings. Update your "My Profile" tab to keep your advice accurate.</li>');
+            stiMaintenance.push('<li><strong>Update Profile:</strong> Your logged partners don\'t match your profile settings. Update "My Profile" for more accurate clinical guidance.</li>');
         }
-    }
-
-    // Symptoms (Always relevant)
-    if (!isVirgin || (state.encounters && state.encounters.length > 0)) {
-        stiMaintenance.push('<li><strong>Symptom Check:</strong> If you see any sores, feel pain when peeing, or notice unusual fluid, see a doctor right away—even if your HIV risk score is low.</li>');
+        
+        stiMaintenance.push('<li><strong>Symptom Check:</strong> If you notice sores, discharge, or pain when urinating, see a doctor immediately, regardless of your risk score.</li>');
     }
 
     // Assembler
     list.innerHTML = '';
-    const hivAdvice = [...level1, ...level2, ...level3];
-    if (hivAdvice.length > 0) {
-        hivAdvice.forEach(msg => list.innerHTML += msg);
+    const allAdvice = [...level1, ...level2, ...level3];
+    if (allAdvice.length > 0) {
+        allAdvice.forEach(msg => list.innerHTML += msg);
     }
 
-    if (hivAdvice.length > 0 && stiMaintenance.length > 0) {
+    if (allAdvice.length > 0 && stiMaintenance.length > 0) {
         list.innerHTML += '<li class="guidance-separator"></li>';
     }
 
@@ -553,19 +594,7 @@ function updateGuidance() {
     }
 
     if (list.innerHTML === '') {
-        if (isVirgin) {
-            list.innerHTML = `
-                <li><strong>Welcome!</strong> Since you have no sexual history, your sexual HIV risk is currently zero.</li>
-                <li><strong>Starting out:</strong> Use this app as a safe place to learn about staying protected before you start your sexual journey.</li>
-                <li><strong>Next steps:</strong> Explore the "My Profile" tab to learn about building a safety plan with your future partners.</li>
-            `;
-        } else {
-            list.innerHTML = `
-                <li><strong>Baseline Health:</strong> If you haven't had a sexual health check-up in over a year, we recommend a baseline test to confirm your current status.</li>
-                <li><strong>Window Periods:</strong> Remember that HIV can take up to 45 days to show up on a standard test. Accuracy improves the longer you wait after an exposure.</li>
-                <li><strong>Proactive Tracking:</strong> Log your first encounter using the "+" button below to begin receiving personalized risk scores.</li>
-            `;
-        }
+        list.innerHTML = '<li><strong>Getting Started:</strong> Update your profile and log encounters to receive personalized clinical guidance.</li>';
     }
 }
 
@@ -664,7 +693,7 @@ function renderEncounters() {
 
         const details = [
             actLabels[enc.actType] || enc.actType.replace('_', ' '),
-            enc.partnerGender ? 'Partner: ' + enc.partnerGender.replace('_', ' ') : 'Partner: N/A',
+            enc.partnerGender ? 'Partner: ' + (GENDER_LABELS[enc.partnerGender] || enc.partnerGender) : 'Partner: N/A',
             enc.condomUse === 'yes' ? 'Condom Used' : (enc.condomUse == 'no' ? 'No Condom' : 'Broken Condom'),
             'Status: ' + enc.partnerStatus.split('_').join(' ')
         ].join(' • ');

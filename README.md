@@ -6,7 +6,7 @@ A privacy-first, offline-ready Progressive Web App (PWA) designed to help users 
 
 - **WHO-Aligned Risk Engine**: Calculates risk scores for individual encounters based on partner status, gender identity, act type, and preventative measures (PrEP/Condoms/Circumcision).
 - **Privacy First**: 100% serverless. Your health data never leaves your device. All data is stored locally in your browser's `localStorage`.
-- **Smart Clinical Guidance**: Personalized advice that adapts to your profile. It prioritizes emergency alerts (PEP windows) and routine health maintenance (STI screenings).
+- **Smart Guidance**: Personalized advice that adapts to your profile and history. It provides proactive recommendations (like PrEP for key populations) even before encounters are logged, alongside emergency alerts (PEP windows) and routine health maintenance.
 - **Data Portability**: Full Export/Import functionality. Move your health history between devices securely via JSON backups.
 - **Daily Reminders**: Optional system notifications to help you stay consistent with your logs.
 - **Offline Ready**: Works without an internet connection once installed, thanks to Service Worker integration.

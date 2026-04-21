@@ -66,6 +66,13 @@ body {
     padding: 24px;
     box-shadow: var(--glass-shadow);
     margin-bottom: 20px;
+    position: relative;
+    transition: var(--transition);
+}
+
+/* Ensure card with open dropdown stays on top */
+.glass-card:has(.dropdown-menu.active) {
+    z-index: 100;
 }
 
 .glass-card h2, .glass-card h3 {
