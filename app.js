@@ -513,9 +513,9 @@ function getRecommendedFollowUpTests() {
             const hasHivRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
             const condomUsed = enc.condomUse === 'yes';
             const isHighRiskAct = ['receptive_anal', 'insertive_anal'].includes(enc.actType);
-            
-            // Only recommend testing if: no condom OR unknown/positive status OR high-risk act
-            return !condomUsed || hasHivRisk || isHighRiskAct;
+
+            // Only recommend testing if: unknown/positive status OR high-risk act (unprotected vaginal with confirmed negative is low risk)
+            return hasHivRisk || isHighRiskAct;
         });
         
         if (hasHighRiskEncounters) {
@@ -531,19 +531,26 @@ function getRecommendedFollowUpTests() {
         const isHighRisk = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
         
         // Hep B screening - more targeted approach to reduce overkill
-        const hasHepBRiskFactors = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
-        const hasUnprotectedSex = state.encounters.some(enc => enc.condomUse !== 'yes');
-        
-        if (!state.profile.hepBVaccinated && (hasHepBRiskFactors || hasUnprotectedSex)) {
-            recommendations.push('Hep B');
-        } else if (!state.profile.hepBVaccinated && hasReceptiveAnalWithRisk) {
-            // Receptive anal sex with unknown status partners warrants Hep B screening
+        const hasHepBRiskFactors = state.profile.pwid || isUserInKeyNetwork;
+        const hasUnprotectedSexWithRisk = state.encounters.some(enc => {
+            const hasPartnerRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
+            const noCondom = enc.condomUse !== 'yes';
+            return noCondom && hasPartnerRisk;
+        });
+
+        if (!state.profile.hepBVaccinated && (hasHepBRiskFactors || hasUnprotectedSexWithRisk)) {
             recommendations.push('Hep B');
         } else if (isHighRisk && !state.profile.hepBVaccinated) {
-            // If vaccinated but high risk, only recommend if they've NEVER logged a result or it's very old
-            const latestHepB = latestTests.hep_b;
-            if (!latestHepB) {
-                recommendations.push('Hep B (Baseline screening recommended for high-risk groups)');
+            // Baseline screening only if there's actual risk (unknown status partners, not just profile flags)
+            const hasRiskExposure = state.encounters.some(enc => {
+                const hasPartnerRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
+                return hasPartnerRisk;
+            });
+            if (hasRiskExposure) {
+                const latestHepB = latestTests.hep_b;
+                if (!latestHepB) {
+                    recommendations.push('Hep B (Baseline screening recommended for high-risk groups)');
+                }
             }
         }
 
