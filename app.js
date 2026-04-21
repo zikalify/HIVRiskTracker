@@ -5,13 +5,14 @@ let state = {
         hasSexWith: [],
         role: 'versatile',
         onPrep: false,
+        prepStartDate: null,
         circumcised: false,
         sti: false,
         pwid: false,
-        isVirgin: true,
-        lastStiTestDate: null
+        isVirgin: true
     },
     encounters: [],
+    tests: [],
     settings: {
         remindersEnabled: false,
         lastReminderDate: null
@@ -26,6 +27,37 @@ const GENDER_LABELS = {
     'trans_female': 'Transgender Women',
     'trans_male': 'Transgender Men',
     'non_binary': 'Non-binary / Others'
+};
+
+const TEST_TYPE_LABELS = {
+    hiv: 'HIV Test',
+    sti_panel: 'Full STI Panel'
+};
+
+const TEST_RESULT_OPTIONS = {
+    hiv: [
+        { value: 'negative', label: 'Negative' },
+        { value: 'positive', label: 'Positive' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'inconclusive', label: 'Inconclusive' }
+    ],
+    sti_panel: [
+        { value: 'clear', label: 'All Negative / Clear' },
+        { value: 'positive', label: 'Positive / Needs Treatment' },
+        { value: 'treated', label: 'Treated / Resolved' },
+        { value: 'mixed', label: 'Mixed Results' },
+        { value: 'pending', label: 'Pending' }
+    ]
+};
+
+const TEST_RESULT_LABELS = {
+    negative: 'Negative',
+    positive: 'Positive',
+    pending: 'Pending',
+    inconclusive: 'Inconclusive',
+    clear: 'All Negative / Clear',
+    treated: 'Treated / Resolved',
+    mixed: 'Mixed Results'
 };
 
 // DOM Elements
@@ -45,11 +77,13 @@ const userHasSexWithMenu = document.getElementById('user-has-sex-with');
 const hasSexWithToggle = document.getElementById('has-sex-with-toggle');
 const userRole = document.getElementById('user-role');
 const userPrep = document.getElementById('user-prep');
+const userPrepStartDate = document.getElementById('user-prep-start-date');
 const userCircumcised = document.getElementById('user-circumcised');
 const userSti = document.getElementById('user-sti');
 const userPwid = document.getElementById('user-pwid');
 const userVirgin = document.getElementById('user-virgin');
 const circumcisionGroup = document.getElementById('circumcision-group');
+const prepStartGroup = document.getElementById('prep-start-group');
 
 // Form
 const encounterForm = document.getElementById('encounter-form');
@@ -61,10 +95,15 @@ const partnerGenderSelect = document.getElementById('partner-gender');
 const encounterDateInput = document.getElementById('encounter-date');
 
 // Screening elements
-const lastStiDateDisplay = document.getElementById('last-sti-date-display');
-const logStiDateInput = document.getElementById('log-sti-date');
-const btnLogStiPanel = document.getElementById('btn-log-sti-panel');
-const btnClearStiPanel = document.getElementById('btn-clear-sti-panel');
+const latestHivTestDisplay = document.getElementById('latest-hiv-test-display');
+const latestStiPanelDisplay = document.getElementById('latest-sti-panel-display');
+const testTypeSelect = document.getElementById('test-type-select');
+const logTestDateInput = document.getElementById('log-test-date');
+const testResultSelect = document.getElementById('test-result-select');
+const btnLogTest = document.getElementById('btn-log-test');
+const btnClearTestHistory = document.getElementById('btn-clear-test-history');
+const testHistoryList = document.getElementById('test-history-list');
+const testResultHelp = document.getElementById('test-result-help');
 
 // Settings elements
 const settingReminders = document.getElementById('setting-reminders');
@@ -91,7 +130,181 @@ function init() {
     if(typeof updateDropdownText === 'function') updateDropdownText();
     updateDashboard();
     renderEncounters();
+    renderTestingUI();
     handleLaunchActions();
+}
+
+function ensureStateShape() {
+    if (!state.profile) state.profile = {};
+    if (!state.encounters) state.encounters = [];
+    if (!state.tests) state.tests = [];
+    if (!state.settings) state.settings = { remindersEnabled: false, lastReminderDate: null };
+}
+
+function migrateLegacyState() {
+    if (state.profile.lastStiTestDate) {
+        const alreadyHasLegacyPanel = state.tests.some(test =>
+            test.type === 'sti_panel' &&
+            new Date(test.date).toISOString() === new Date(state.profile.lastStiTestDate).toISOString()
+        );
+
+        if (!alreadyHasLegacyPanel) {
+            state.tests.push({
+                id: `legacy-sti-${Date.parse(state.profile.lastStiTestDate) || Date.now()}`,
+                type: 'sti_panel',
+                result: 'clear',
+                date: new Date(state.profile.lastStiTestDate).toISOString(),
+                source: 'legacy'
+            });
+        }
+
+        delete state.profile.lastStiTestDate;
+    }
+}
+
+function sortTestsDescending(tests = state.tests) {
+    return [...tests].sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function getLatestTest(type) {
+    return sortTestsDescending(state.tests).find(test => test.type === type) || null;
+}
+
+function formatTestSummary(test) {
+    if (!test) return null;
+    const dateStr = new Date(test.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${TEST_RESULT_LABELS[test.result] || test.result} on ${dateStr}`;
+}
+
+function getRelevantNegativeHivTest() {
+    return sortTestsDescending(state.tests).find(test => test.type === 'hiv' && test.result === 'negative') || null;
+}
+
+function getEncountersSince(date) {
+    if (!date) return [...state.encounters];
+    return state.encounters.filter(enc => new Date(enc.date) > new Date(date));
+}
+
+function getRecentExposureWindowInfo(referenceDate = new Date()) {
+    const cutoff = new Date(referenceDate);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const recentEncounters = state.encounters.filter(enc => new Date(enc.date) >= cutoff);
+    return {
+        cutoff,
+        recentEncounters
+    };
+}
+
+function getPrepDurationDays() {
+    if (!state.profile.onPrep || !state.profile.prepStartDate) return null;
+
+    const start = new Date(state.profile.prepStartDate);
+    if (Number.isNaN(start.getTime())) return null;
+
+    const diffMs = Date.now() - start.getTime();
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+function getCurrentHivRiskContext() {
+    const latestHivTest = getLatestTest('hiv');
+
+    if (!latestHivTest) {
+        return {
+            latestHivTest: null,
+            relevantEncounters: [...state.encounters],
+            historicalEncounters: [],
+            windowedEncounters: []
+        };
+    }
+
+    if (latestHivTest.result === 'negative') {
+        const cutoff = new Date(latestHivTest.date);
+        cutoff.setDate(cutoff.getDate() - 30);
+
+        const relevantEncounters = state.encounters.filter(enc => new Date(enc.date) >= cutoff);
+        const historicalEncounters = state.encounters.filter(enc => new Date(enc.date) < cutoff);
+        const windowedEncounters = state.encounters.filter(enc => {
+            const encDate = new Date(enc.date);
+            return encDate >= cutoff && encDate <= new Date(latestHivTest.date);
+        });
+
+        return {
+            latestHivTest,
+            relevantEncounters,
+            historicalEncounters,
+            windowedEncounters,
+            cutoff
+        };
+    }
+
+    return {
+        latestHivTest,
+        relevantEncounters: [...state.encounters],
+        historicalEncounters: [],
+        windowedEncounters: []
+    };
+}
+
+function populateTestResultOptions() {
+    const type = testTypeSelect.value;
+    const options = TEST_RESULT_OPTIONS[type] || [];
+    testResultSelect.innerHTML = options
+        .map(option => `<option value="${option.value}">${option.label}</option>`)
+        .join('');
+
+    if (type === 'hiv') {
+        testResultHelp.textContent = 'Use this for HIV-specific results so the dashboard can react to negative, positive, pending, or inconclusive outcomes.';
+    } else {
+        testResultHelp.textContent = 'Use this for a screening panel summary so the app can track STI follow-up and routine screening timing separately from HIV tests.';
+    }
+}
+
+function renderTestingUI() {
+    const latestHivTest = getLatestTest('hiv');
+    const latestStiPanel = getLatestTest('sti_panel');
+
+    latestHivTestDisplay.textContent = formatTestSummary(latestHivTest) || 'No HIV test logged';
+    latestStiPanelDisplay.textContent = formatTestSummary(latestStiPanel) || 'No STI panel logged';
+
+    const sortedTests = sortTestsDescending(state.tests);
+    btnClearTestHistory.style.display = sortedTests.length ? 'inline-flex' : 'none';
+
+    if (!sortedTests.length) {
+        testHistoryList.innerHTML = '<div class="empty-state">No test results logged yet.</div>';
+        return;
+    }
+
+    testHistoryList.innerHTML = '';
+    sortedTests.forEach(test => {
+        const item = document.createElement('div');
+        item.className = 'encounter-item';
+
+        const dateStr = new Date(test.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        item.innerHTML = `
+            <div class="encounter-header">
+                <div class="encounter-header-left">
+                    <span class="encounter-date">${dateStr}</span>
+                    <span class="encounter-risk-badge badge-low">${TEST_TYPE_LABELS[test.type]}</span>
+                </div>
+                <div class="encounter-actions">
+                    <button class="delete-btn" data-id="${test.id}" title="Delete Test Result">
+                        <span class="material-symbols-rounded">delete</span>
+                    </button>
+                </div>
+            </div>
+            <div class="encounter-details">${TEST_RESULT_LABELS[test.result] || test.result}</div>
+        `;
+
+        const deleteBtn = item.querySelector('.delete-btn');
+        deleteBtn.addEventListener('click', () => {
+            if (confirm('Delete this test result?')) {
+                state.tests = state.tests.filter(entry => String(entry.id) !== String(test.id));
+                saveState();
+            }
+        });
+
+        testHistoryList.appendChild(item);
+    });
 }
 
 function toggleCircumcisionVisibility() {
@@ -101,6 +314,18 @@ function toggleCircumcisionVisibility() {
         circumcisionGroup.style.display = 'none';
         state.profile.circumcised = false;
         if(userCircumcised) userCircumcised.checked = false;
+    }
+}
+
+function togglePrepStartVisibility() {
+    if (!prepStartGroup || !userPrepStartDate) return;
+
+    if (userPrep.checked) {
+        prepStartGroup.style.display = 'block';
+    } else {
+        prepStartGroup.style.display = 'none';
+        state.profile.prepStartDate = null;
+        userPrepStartDate.value = '';
     }
 }
 
@@ -156,15 +381,7 @@ function refreshApp() {
     updateDashboard();
     renderEncounters();
     updateGuidance();
-    
-    // Update STI screening display
-    if (state.profile.lastStiTestDate) {
-        lastStiDateDisplay.textContent = new Date(state.profile.lastStiTestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        btnClearStiPanel.style.display = 'flex';
-    } else {
-        lastStiDateDisplay.textContent = "Never logged";
-        btnClearStiPanel.style.display = 'none';
-    }
+    renderTestingUI();
 
     if(typeof updateDropdownText === 'function') updateDropdownText();
 }
@@ -193,31 +410,30 @@ function loadState() {
     const saved = localStorage.getItem('hivRiskState');
     if (saved) {
         state = JSON.parse(saved);
-        
-        // Populate form fields
-        userGender.value = state.profile.gender || 'cis_male';
-        if (!state.profile.hasSexWith) state.profile.hasSexWith = [];
-        userHasSexWithCheckboxes.forEach(cb => {
-            cb.checked = state.profile.hasSexWith.includes(cb.value);
-        });
-        userRole.value = state.profile.role || 'versatile';
-        userPrep.checked = state.profile.onPrep || false;
-        userCircumcised.checked = state.profile.circumcised || false;
-        userSti.checked = state.profile.sti || false;
-        userPwid.checked = state.profile.pwid || false;
-        userVirgin.checked = state.profile.isVirgin !== undefined ? state.profile.isVirgin : true;
-        
-        if (state.profile.lastStiTestDate) {
-            logStiDateInput.value = state.profile.lastStiTestDate.split('T')[0];
-        } else {
-            logStiDateInput.value = new Date().toISOString().split('T')[0];
-        }
-
-        // Settings
-        if (!state.settings) state.settings = { remindersEnabled: false, lastReminderDate: null };
-        settingReminders.checked = state.settings.remindersEnabled || false;
-        updateReminderUI();
     }
+
+    ensureStateShape();
+    migrateLegacyState();
+    
+    // Populate form fields
+    userGender.value = state.profile.gender || 'cis_male';
+    if (!state.profile.hasSexWith) state.profile.hasSexWith = [];
+    userHasSexWithCheckboxes.forEach(cb => {
+        cb.checked = state.profile.hasSexWith.includes(cb.value);
+    });
+    userRole.value = state.profile.role || 'versatile';
+    userPrep.checked = state.profile.onPrep || false;
+    userPrepStartDate.value = state.profile.prepStartDate ? state.profile.prepStartDate.split('T')[0] : '';
+    userCircumcised.checked = state.profile.circumcised || false;
+    userSti.checked = state.profile.sti || false;
+    userPwid.checked = state.profile.pwid || false;
+    userVirgin.checked = state.profile.isVirgin !== undefined ? state.profile.isVirgin : true;
+    logTestDateInput.value = new Date().toISOString().split('T')[0];
+    populateTestResultOptions();
+    togglePrepStartVisibility();
+
+    settingReminders.checked = state.settings.remindersEnabled || false;
+    updateReminderUI();
 }
 
 function saveState() {
@@ -239,7 +455,16 @@ function setupEventListeners() {
     // Profile Changes
     userGender.addEventListener('change', (e) => { state.profile.gender = e.target.value; toggleCircumcisionVisibility(); recalculateRiskHistory(); saveState(); });
     userRole.addEventListener('change', (e) => { state.profile.role = e.target.value; recalculateRiskHistory(); saveState(); });
-    userPrep.addEventListener('change', (e) => { state.profile.onPrep = e.target.checked; recalculateRiskHistory(); saveState(); });
+    userPrep.addEventListener('change', (e) => {
+        state.profile.onPrep = e.target.checked;
+        togglePrepStartVisibility();
+        recalculateRiskHistory();
+        saveState();
+    });
+    userPrepStartDate.addEventListener('change', (e) => {
+        state.profile.prepStartDate = e.target.value ? new Date(e.target.value).toISOString() : null;
+        saveState();
+    });
     userCircumcised.addEventListener('change', (e) => { state.profile.circumcised = e.target.checked; recalculateRiskHistory(); saveState(); });
     userSti.addEventListener('change', (e) => { state.profile.sti = e.target.checked; recalculateRiskHistory(); saveState(); });
     userPwid.addEventListener('change', (e) => { state.profile.pwid = e.target.checked; recalculateRiskHistory(); saveState(); });
@@ -265,21 +490,40 @@ function setupEventListeners() {
         }
     });
 
-    // STI Panel Logging
-    btnLogStiPanel.addEventListener('click', () => {
-        const testDate = logStiDateInput.value;
-        if (!testDate) {
-            alert("Please select a date for your screening panel.");
-            return;
-        }
-        state.profile.lastStiTestDate = new Date(testDate).toISOString();
-        saveState();
-        alert("Full STI Panel logged. Your screening counter has been reset.");
+    // Testing history
+    testTypeSelect.addEventListener('change', () => {
+        populateTestResultOptions();
     });
 
-    btnClearStiPanel.addEventListener('click', () => {
-        if(confirm("Are you sure you want to clear your last full panel entry? This will revert your screening counter.")) {
-            state.profile.lastStiTestDate = null;
+    btnLogTest.addEventListener('click', () => {
+        const testDate = logTestDateInput.value;
+        const type = testTypeSelect.value;
+        const result = testResultSelect.value;
+
+        if (!testDate) {
+            alert('Please select the date of the test result.');
+            return;
+        }
+
+        if (!type || !result) {
+            alert('Please select both a test type and a result.');
+            return;
+        }
+
+        state.tests.unshift({
+            id: Date.now(),
+            type,
+            result,
+            date: new Date(testDate).toISOString()
+        });
+
+        saveState();
+        alert(`${TEST_TYPE_LABELS[type]} result saved.`);
+    });
+
+    btnClearTestHistory.addEventListener('click', () => {
+        if (confirm('Clear all logged test results? Encounter history will be kept.')) {
+            state.tests = [];
             saveState();
         }
     });
@@ -652,6 +896,236 @@ function updateDashboard() {
     riskMeter.parentElement.classList.remove('risk-level-low', 'risk-level-medium', 'risk-level-high');
     riskMeter.parentElement.classList.add(colorClass);
     
+    riskMeter.style.strokeDasharray = `${percent}, 100`;
+    riskText.textContent = text;
+    riskDesc.textContent = desc;
+}
+
+function updateGuidance() {
+    const list = document.getElementById('guidance-list');
+    if (!list) return;
+
+    const uGender = state.profile.gender || 'cis_male';
+    const profileHasSexWith = state.profile.hasSexWith || [];
+    const encounterPartnerGenders = state.encounters ? state.encounters.map(e => e.partnerGender) : [];
+    const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
+    const isVirgin = state.profile.isVirgin;
+    const profileFactors = getProfileRiskFactors();
+    const latestHivTest = getLatestTest('hiv');
+    const latestStiPanel = getLatestTest('sti_panel');
+    const { relevantEncounters, historicalEncounters, windowedEncounters } = getCurrentHivRiskContext();
+    const prepDurationDays = getPrepDurationDays();
+
+    let isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg));
+    if (uGender.startsWith('trans_')) isUserInKeyNetwork = true;
+
+    const isPrEPCandidate = profileFactors.includes('msm') ||
+        profileFactors.includes('trans_woman') ||
+        profileFactors.includes('pwid') ||
+        profileFactors.includes('active_sti');
+
+    let level1 = [];
+    let level2 = [];
+    let level3 = [];
+    let stiMaintenance = [];
+
+    const now = new Date();
+    let hasPenetrativeReceptiveRole = false;
+
+    if (latestHivTest?.result === 'positive') {
+        level1.push('<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;"><strong style="color:var(--danger-color)">Positive HIV Result Logged:</strong> This app should no longer frame your status as acquisition risk. Please connect with an HIV specialist or clinic for confirmatory follow-up, treatment, and partner support.</li>');
+        level2.push('<li><strong style="color:var(--warning-color)">Care Path:</strong> If this was a rapid or self-test, seek confirmatory testing. If confirmed, prompt treatment can protect your health and help you reach an undetectable viral load.</li>');
+    } else if (latestHivTest?.result === 'pending') {
+        level2.push('<li><strong style="color:var(--warning-color)">Pending HIV Test:</strong> Do not assume a negative result yet. Follow through on your result and keep recent exposures in mind.</li>');
+    } else if (latestHivTest?.result === 'inconclusive') {
+        level2.push('<li><strong style="color:var(--warning-color)">Inconclusive HIV Test:</strong> This does not rule infection in or out. Arrange repeat or confirmatory testing.</li>');
+    } else if (latestHivTest?.result === 'negative' && windowedEncounters.length > 0) {
+        level2.push(`<li><strong style="color:var(--warning-color)">30-Day Window Reminder:</strong> Your latest HIV test is negative, but <strong>${windowedEncounters.length} recent encounter${windowedEncounters.length === 1 ? '' : 's'}</strong> still fall within the window period before that test. Keep those exposures in mind until follow-up timing is more reliable.</li>`);
+    } else if (latestHivTest?.result === 'negative') {
+        level3.push('<li><strong style="color:var(--success-color)">Recent HIV Result:</strong> Your latest logged HIV test is negative. Older encounters remain in history, but the app focuses current HIV risk guidance on newer or still-relevant exposures.</li>');
+    }
+
+    if (latestStiPanel?.result === 'positive' || latestStiPanel?.result === 'mixed') {
+        level2.push('<li><strong style="color:var(--warning-color)">STI Follow-Up:</strong> Your latest STI panel suggests treatment or follow-up may still be needed. Complete treatment and consider retesting as advised.</li>');
+    } else if (latestStiPanel?.result === 'pending') {
+        level2.push('<li><strong style="color:var(--warning-color)">Pending STI Panel:</strong> Hold off on assuming you are clear until the final results come back.</li>');
+    } else if (latestStiPanel?.result === 'treated') {
+        level3.push('<li><strong style="color:var(--success-color)">STI Treatment Logged:</strong> Your latest panel is marked treated/resolved. Keep routine screening on schedule if you continue having new partners.</li>');
+    }
+
+    relevantEncounters.forEach(enc => {
+        const encDate = new Date(enc.date);
+        const diffHours = (now - encDate) / (1000 * 60 * 60);
+
+        if (diffHours <= 720 && (enc.actType === 'receptive_anal' || enc.actType === 'receptive_vaginal')) {
+            hasPenetrativeReceptiveRole = true;
+        }
+
+        if (latestHivTest?.result === 'positive') return;
+
+        if (diffHours <= 72 && enc.riskScore >= 20) {
+            level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
+                <strong style="color:var(--danger-color)">EMERGENCY PEP WINDOW:</strong>
+                You had a high-risk exposure within the last 3 days. Go to an emergency room or clinic <strong>RIGHT NOW</strong> to ask for <strong>PEP (Post-Exposure Prophylaxis)</strong>.
+            </li>`);
+        } else if (diffHours <= 720 && enc.riskScore >= 20) {
+            level2.push('<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now.</li>');
+        }
+    });
+
+    if (!state.profile.onPrep && latestHivTest?.result !== 'positive') {
+        if (isPrEPCandidate) {
+            const factorLabels = {
+                msm: 'Men who have sex with men (MSM)',
+                trans_woman: 'Transgender Women',
+                pwid: 'People who inject drugs',
+                active_sti: 'Active STI history'
+            };
+            const displayFactors = profileFactors.map(f => factorLabels[f] || f.replace(/_/g, ' '));
+            level3.push(`<li><strong style="color:var(--accent-color)">WHO PrEP Recommendation:</strong> Based on your profile (${displayFactors.join(', ')}), daily <strong>PrEP</strong> is highly recommended. It is a powerful tool to stay HIV-free regardless of individual encounter outcomes.</li>`);
+        }
+    } else if (latestHivTest?.result !== 'positive') {
+        if (prepDurationDays !== null && prepDurationDays < 7) {
+            level3.push('<li><strong style="color:var(--warning-color)">Recently Started PrEP:</strong> You logged that you started PrEP within the last week. Keep taking it consistently and follow clinician guidance, since protection may not be fully established immediately.</li>');
+        } else if (prepDurationDays !== null && prepDurationDays < 30) {
+            level3.push('<li><strong style="color:var(--success-color)">Building PrEP Routine:</strong> You started PrEP recently. Staying consistent now is especially important while you build a steady protection routine.</li>');
+        } else if (prepDurationDays !== null) {
+            level3.push('<li><strong style="color:var(--success-color)">On PrEP:</strong> Great job staying on PrEP. Keep taking it consistently, and remember condoms are still helpful for protection against other STIs like Syphilis and Gonorrhea.</li>');
+        } else {
+            level3.push('<li><strong style="color:var(--success-color)">On PrEP:</strong> Great job taking your daily PrEP. If you want more tailored reminders, add your optional PrEP start date in your profile. Condoms are still needed for protection against other STIs like Syphilis and Gonorrhea.</li>');
+        }
+    }
+
+    if (state.profile.pwid) {
+        level2.push('<li><strong style="color:var(--danger-color)">Harm Reduction:</strong> Sharing needles is high risk. Use clean equipment every time. Look for a local "Needle Exchange" program for free, sterile supplies.</li>');
+    }
+    if (state.profile.sti) {
+        level2.push('<li><strong style="color:var(--warning-color)">Active STI:</strong> Untreated STIs cause inflammation that makes it significantly easier for HIV to enter the bloodstream. Complete your treatment before having sex again.</li>');
+    }
+
+    if (state.profile.role === 'receptive' && (hasPenetrativeReceptiveRole || !isVirgin)) {
+        level3.push('<li><strong>Receiving Risk:</strong> Receptive penetrative sex (anal or vaginal) carries a higher biological risk. Ensure consistent condom use if not on PrEP.</li>');
+    }
+
+    if (isUserInKeyNetwork && !isVirgin) {
+        level3.push('<li><strong style="color:var(--accent-color)">Network Safety:</strong> Since you or your partners are part of a key population, WHO recommends a full STI screening every 3 to 6 months.</li>');
+    }
+
+    if (isVirgin) {
+        level3.push('<li><strong>Sexual Debut:</strong> Since you have no sexual history, your current risk is zero. This is the perfect time to establish a prevention plan (like starting PrEP) before your first encounter.</li>');
+    }
+
+    if (!isVirgin || state.encounters.length > 0 || state.tests.length > 0) {
+        const resolvedStiPanel = sortTestsDescending(state.tests).find(test => test.type === 'sti_panel' && test.result !== 'pending');
+        const lastStiDate = resolvedStiPanel ? new Date(resolvedStiPanel.date) : null;
+        const encountersSinceTest = lastStiDate ? state.encounters.filter(e => new Date(e.date) > lastStiDate).length : state.encounters.length;
+
+        if (encountersSinceTest > 0) {
+            stiMaintenance.push(`<li><strong>Screening Check:</strong> You have logged <strong>${encountersSinceTest} partner${encountersSinceTest === 1 ? '' : 's'}</strong> since your last full STI check. Consider a routine panel.</li>`);
+        }
+
+        const quarterlyCutoff = new Date();
+        quarterlyCutoff.setDate(quarterlyCutoff.getDate() - 90);
+        if (!lastStiDate || lastStiDate < quarterlyCutoff) {
+            if (isPrEPCandidate) {
+                stiMaintenance.push('<li><strong style="color:var(--warning-color)">Overdue Screening:</strong> Quarterly screenings are the standard for PrEP users and key populations.</li>');
+            }
+        }
+
+        if (historicalEncounters.length > 0 && latestHivTest?.result === 'negative') {
+            stiMaintenance.push(`<li><strong>Historical Encounters Preserved:</strong> ${historicalEncounters.length} older encounter${historicalEncounters.length === 1 ? '' : 's'} remain in your history before the latest negative HIV test, but they are not driving your current HIV risk view.</li>`);
+        }
+
+        const hasDisparity = encounterPartnerGenders.some(pg => pg && !profileHasSexWith.includes(pg));
+        if (hasDisparity) {
+            stiMaintenance.push('<li><strong>Update Profile:</strong> Your logged partners don\'t match your profile settings. Update "My Profile" for more accurate clinical guidance.</li>');
+        }
+
+        if (uGender === 'cis_male' && !state.profile.circumcised && profileHasSexWith.includes('cis_female')) {
+            stiMaintenance.push('<li><strong>Prevention Note:</strong> Medical male circumcision can reduce the risk of heterosexually acquired HIV infection in men by approximately 60%.</li>');
+        }
+
+        stiMaintenance.push('<li><strong>Symptom Check:</strong> If you notice sores, discharge, or pain when urinating, see a doctor immediately, regardless of your risk score.</li>');
+    }
+
+    list.innerHTML = '';
+    const allAdvice = [...level1, ...level2, ...level3];
+    if (allAdvice.length > 0) {
+        allAdvice.forEach(msg => list.innerHTML += msg);
+    }
+
+    if (allAdvice.length > 0 && stiMaintenance.length > 0) {
+        list.innerHTML += '<li class="guidance-separator"></li>';
+    }
+
+    if (stiMaintenance.length > 0) {
+        stiMaintenance.forEach(msg => list.innerHTML += msg);
+    }
+
+    if (list.innerHTML === '') {
+        list.innerHTML = '<li><strong>Getting Started:</strong> Update your profile and log encounters to receive personalized clinical guidance.</li>';
+    }
+}
+
+function updateDashboard() {
+    const latestHivTest = getLatestTest('hiv');
+    const { relevantEncounters, windowedEncounters } = getCurrentHivRiskContext();
+    let totalRiskScore = 0;
+
+    relevantEncounters.forEach(enc => {
+        totalRiskScore += enc.riskScore || 0;
+    });
+
+    if (state.profile.onPrep) {
+        totalRiskScore *= 0.01;
+    }
+
+    let percent = 25;
+    let colorClass = 'risk-level-low';
+    let text = 'Low';
+    let desc = state.profile.onPrep
+        ? 'PrEP provides excellent protection when taken daily. Your risk remains very low.'
+        : 'You are maintaining low risk practices.';
+
+    if (latestHivTest?.result === 'positive') {
+        percent = 95;
+        colorClass = 'risk-level-high';
+        text = 'Follow Up';
+        desc = 'A positive HIV result is logged. The app should shift from acquisition risk to care, confirmatory testing, treatment, and partner support.';
+    } else if (latestHivTest?.result === 'pending' || latestHivTest?.result === 'inconclusive') {
+        percent = 60;
+        colorClass = 'risk-level-medium';
+        text = 'Follow Up';
+        desc = latestHivTest.result === 'pending'
+            ? 'An HIV test result is pending. Avoid false reassurance until the final result is back.'
+            : 'Your latest HIV test is inconclusive. Arrange repeat or confirmatory testing.';
+    } else if (totalRiskScore > 0 && totalRiskScore < 20) {
+        percent = 40;
+        text = 'Low';
+        desc = latestHivTest?.result === 'negative' && windowedEncounters.length > 0
+            ? 'Your latest HIV test is negative, but a recent exposure is still inside the 30-day window period.'
+            : 'Your risk remains low, but continue to use preventative measures.';
+    } else if (totalRiskScore >= 20 && totalRiskScore < 60) {
+        percent = 65;
+        colorClass = 'risk-level-medium';
+        text = 'Moderate';
+        desc = latestHivTest?.result === 'negative'
+            ? 'You have newer or still-relevant encounters after your latest negative HIV test. Consider follow-up testing and prevention planning.'
+            : "You've logged encounters with moderate risk elements. Consider getting tested or evaluating PrEP.";
+    } else if (totalRiskScore >= 60) {
+        percent = 90;
+        colorClass = 'risk-level-high';
+        text = 'High';
+        desc = latestHivTest?.result === 'negative'
+            ? 'Some encounters remain clinically relevant despite your negative HIV test because they are within the 30-day window period.'
+            : 'Recent encounters pose a significant risk. Please consult a healthcare provider for testing or PEP/PrEP options immediately.';
+    } else if (latestHivTest?.result === 'negative' && windowedEncounters.length === 0) {
+        desc = 'Your latest HIV test is negative, and no newer or window-period encounters are currently driving risk.';
+    }
+
+    riskMeter.parentElement.classList.remove('risk-level-low', 'risk-level-medium', 'risk-level-high');
+    riskMeter.parentElement.classList.add(colorClass);
+
     riskMeter.style.strokeDasharray = `${percent}, 100`;
     riskText.textContent = text;
     riskDesc.textContent = desc;

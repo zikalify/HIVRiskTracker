@@ -1,7 +1,7 @@
 {
   "id": "./?app-id=hiv-risk-tracker",
   "name": "HIV Risk Tracker",
-  "short_name": "HIV Tracker",
+  "short_name": "HIV Risk",
   "description": "Offline HIV risk tracking and reminder app based on WHO standards.",
   "lang": "en",
   "dir": "ltr",
