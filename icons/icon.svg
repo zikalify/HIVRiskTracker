@@ -1,0 +1,15 @@
+<svg xmlns="http://www.2000/svg" viewBox="0 0 512 512">
+    <!-- Background Circle -->
+    <rect width="512" height="512" rx="120" fill="#0f111a" />
+    
+    <!-- Outer Ring -->
+    <circle cx="256" cy="256" r="190" fill="none" stroke="#7b61ff" stroke-width="28" stroke-opacity="0.2" />
+    
+    <!-- Pulse Line (EKG) -->
+    <path d="M 120 256 H 200 L 230 150 L 280 360 L 310 256 H 392" 
+          fill="none" 
+          stroke="#7b61ff" 
+          stroke-width="32" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+</svg>

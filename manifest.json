@@ -1,0 +1,17 @@
+{
+  "name": "HIV Risk Tracker",
+  "short_name": "HIV Tracker",
+  "description": "Offline HIV Risk Tracking App based on WHO standards",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f111a",
+  "theme_color": "#0f111a",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

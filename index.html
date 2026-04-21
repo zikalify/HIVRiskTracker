@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HIV Risk Tracker</title>
+    <meta name="description" content="Offline HIV Risk Tracking App based on WHO standards">
+    <meta name="theme-color" content="#121212">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header & Risk Indicator -->
+        <header class="header padding-x">
+            <h1>HIV Risk Tracker</h1>
+        </header>
+
+        <section class="risk-dashboard padding-x padding-y">
+            <div class="glass-card risk-card">
+                <h2>Current Risk Assessment</h2>
+                <div class="risk-meter-container">
+                    <svg viewBox="0 0 36 36" class="circular-chart">
+                        <path class="circle-bg"
+                            d="M18 2.0845
+                            a 15.9155 15.9155 0 0 1 0 31.831
+                            a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path class="circle-fill risk-indicator-path"
+                            stroke-dasharray="0, 100"
+                            d="M18 2.0845
+                            a 15.9155 15.9155 0 0 1 0 31.831
+                            a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <text x="18" y="20.35" class="risk-percentage">Low</text>
+                    </svg>
+                </div>
+                <p id="risk-description" class="risk-description">You are taking excellent precautions. Continue your current practices.</p>
+                <div class="test-action">
+                    <button id="btn-test-negative" class="btn primary-btn"><span class="material-symbols-rounded">medical_services</span> Log Negative Test</button>
+                    <p class="test-disclaimer">Resets baseline after confirming status.</p>
+                </div>
+            </div>
+            <div id="personal-guidance-card" class="glass-card guidance-card" style="margin-top: 20px;">
+                <h3>Personal Guidance</h3>
+                <ul id="guidance-list" class="guidance-list">
+                    <!-- Populated dynamically -->
+                </ul>
+            </div>
+            <p class="medical-disclaimer"><strong>Disclaimer:</strong> This tool uses generalized WHO data for estimation purposes. It is not medical advice. Consult a healthcare provider for clinical assessments and PrEP prescriptions.</p>
+        </section>
+
+        <!-- Main Tabs -->
+        <div class="tabs padding-x">
+            <button class="tab-btn active" data-tab="tab-encounters">Encounters</button>
+            <button class="tab-btn" data-tab="tab-profile">My Profile</button>
+            <button class="tab-btn" data-tab="tab-settings">Settings</button>
+        </div>
+
+        <div class="tab-content padding-x padding-y">
+            <!-- Encounters Tab -->
+            <div id="tab-encounters" class="tab-pane active">
+                <button id="btn-new-encounter" class="btn action-btn float-btn">
+                    <span class="material-symbols-rounded">add</span> New Encounter
+                </button>
+                
+                <h3 class="section-title">Recent Activity</h3>
+                <div id="encounters-list" class="encounters-list">
+                    <!-- Encounter items populated via JS -->
+                    <div class="empty-state">No encounters logged yet.</div>
+                </div>
+            </div>
+
+            <!-- Profile / Preventative Measures Tab -->
+            <div id="tab-profile" class="tab-pane">
+                <div class="glass-card settings-card">
+                    <h3>My Identity</h3>
+                    <div class="form-group">
+                        <label>Sex/Gender Identity</label>
+                        <select id="user-gender">
+                            <option value="cis_male">Cisgender Male</option>
+                            <option value="cis_female">Cisgender Female</option>
+                            <option value="trans_female">Transgender Female</option>
+                            <option value="trans_male">Transgender Male</option>
+                            <option value="non_binary">Non-binary / Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>I have sex with:</label>
+                        <div class="custom-dropdown">
+                            <button type="button" class="dropdown-toggle" id="has-sex-with-toggle">Select Partners <span class="material-symbols-rounded">expand_more</span></button>
+                            <div class="dropdown-menu" id="user-has-sex-with">
+                                <label class="checkbox-label"><input type="checkbox" value="cis_male"> Cisgender Male</label>
+                                <label class="checkbox-label"><input type="checkbox" value="cis_female"> Cisgender Female</label>
+                                <label class="checkbox-label"><input type="checkbox" value="trans_female"> Transgender Female</label>
+                                <label class="checkbox-label"><input type="checkbox" value="trans_male"> Transgender Male</label>
+                                <label class="checkbox-label"><input type="checkbox" value="non_binary"> Non-binary / Other</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Common Sexual Role</label>
+                        <select id="user-role">
+                            <option value="versatile">Versatile / Mixed</option>
+                            <option value="receptive">Mostly Receiving (Receptive)</option>
+                            <option value="insertive">Mostly Giving (Insertive)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="glass-card settings-card">
+                    <h3>My Protections</h3>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-prep">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I am on PrEP</strong>
+                            <span>Taking daily Pre-Exposure Prophylaxis.</span>
+                        </div>
+                    </div>
+                    <div class="toggle-group" id="circumcision-group" style="display: none;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-circumcised">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I am circumcised</strong>
+                            <span>Medical male circumcision.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card settings-card">
+                    <h3>Clinical Factors</h3>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-sti">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I have an active STI</strong>
+                            <span>Untreated sexually transmitted infection.</span>
+                        </div>
+                    </div>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-pwid">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I inject drugs</strong>
+                            <span>Shared injecting equipment recently.</span>
+                        </div>
+                    </div>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-virgin">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>No sexual history</strong>
+                            <span>I have never had sexual contact.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card settings-card">
+                    <h3>My Screening History</h3>
+                    <div class="screening-info" style="display:flex; justify-content:space-between; align-items:center;">
+                        <p>Last Full STI Panel (HIV, Syphilis, Gonorrhea, Chlamydia): <strong id="last-sti-date-display">Never logged</strong></p>
+                        <button id="btn-clear-sti-panel" class="btn delete-btn" style="padding: 5px; display: none;" title="Clear Entry"><span class="material-symbols-rounded">close</span></button>
+                    </div>
+                    <div class="form-group" style="margin-top:20px;">
+                        <label>Log Recent Full Panel (HIV, Syphilis, Gonorrhea, Chlamydia)</label>
+                        <div style="display:flex; gap:10px;">
+                            <input type="date" id="log-sti-date" style="flex:1">
+                            <button id="btn-log-sti-panel" class="btn primary-btn" style="padding: 10px 15px;"><span class="material-symbols-rounded">check_circle</span> Log</button>
+                        </div>
+                        <p class="test-disclaimer">Resets counter for encounters since test.</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="tab-pane">
+                <div class="glass-card settings-card">
+                    <h3>App Settings</h3>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-reminders">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>Daily Reminders</strong>
+                            <span id="reminder-status">Get notified if you haven't logged activity for 24h.</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 2rem;">
+                        <button id="btn-request-notifications" class="btn secondary-btn" style="width: 100%;">
+                            <span class="material-symbols-rounded">notifications</span> Test / Enable Notifications
+                        </button>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;">
+                        <button id="btn-export-data" class="btn secondary-btn" style="width: 100%;">
+                            <span class="material-symbols-rounded">download</span> Export Health Data (.json)
+                        </button>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <button id="btn-import-trigger" class="btn secondary-btn" style="width: 100%;">
+                            <span class="material-symbols-rounded">upload</span> Import Health Data (.json)
+                        </button>
+                        <input type="file" id="import-file" style="display: none;" accept=".json">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem; padding-top: 1rem;">
+                        <button id="btn-clear-all-data" class="btn delete-btn" style="width: 100%;">
+                            <span class="material-symbols-rounded">delete_forever</span> Clear All Local Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Encounter Modal -->
+    <div id="encounter-modal" class="modal">
+        <div class="modal-content glass-card">
+            <div class="modal-header">
+                <h2 id="modal-title">Log Encounter</h2>
+                <button class="close-btn"><span class="material-symbols-rounded">close</span></button>
+            </div>
+            <div class="modal-body">
+                <form id="encounter-form">
+                    <div class="form-group">
+                        <label>Date of Encounter</label>
+                        <input type="date" id="encounter-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Partner Gender</label>
+                        <select id="partner-gender" required>
+                            <option value="cis_male">Cisgender Male</option>
+                            <option value="cis_female">Cisgender Female</option>
+                            <option value="trans_female">Transgender Female</option>
+                            <option value="trans_male">Transgender Male</option>
+                            <option value="non_binary">Non-binary / Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Partner's Status (If known)</label>
+                        <select id="partner-status">
+                            <option value="unknown">Unknown / Not Discussed</option>
+                            <option value="negative">Confirmed Negative</option>
+                            <option value="positive_undetectable">Positive (Undetectable / U=U)</option>
+                            <option value="positive_detectable">Positive (Detectable / Not on Treatment)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="partner-prep-group">
+                        <label>Is Partner on PrEP?</label>
+                        <select id="partner-prep">
+                            <option value="unknown">I don't know</option>
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Partner active STI? (If known)</label>
+                        <select id="partner-sti">
+                            <option value="unknown">I don't know</option>
+                            <option value="yes">Yes (Visible or Disclosed)</option>
+                            <option value="no">No</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Type of Sex (Highest Risk Act)</label>
+                        <p class="test-disclaimer" style="margin-bottom: 5px;">Acts are listed from highest to lowest risk. Pick the single riskiest act performed during this encounter.</p>
+                        <select id="act-type">
+                            <option value="receptive_anal">Receiving Anal Sex (Partner performed it on me)</option>
+                            <option value="shared_needles">Shared Injecting Equipment</option>
+                            <option value="insertive_anal">Giving Anal Sex (Performing it on partner)</option>
+                            <option value="receptive_vaginal">Receiving Vaginal Sex (Partner performed it on me)</option>
+                            <option value="insertive_vaginal">Giving Vaginal Sex (Performing it on partner)</option>
+                            <option value="giving_oral">Giving Oral Sex (Performing it on partner)</option>
+                            <option value="receiving_oral">Receiving Oral Sex (Partner performed it on me)</option>
+                            <option value="other">Other / No Penetration</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Condom Use</label>
+                        <select id="condom-use">
+                            <option value="yes">Used consistently and correctly</option>
+                            <option value="broke">Condom broke/slipped</option>
+                            <option value="no">Did not use a condom</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="btn-submit-encounter" class="btn primary-btn" style="width: 100%; margin-top: 1rem;">Save Encounter</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('SW registered: ', registration);
+                }).catch(registrationError => {
+                    console.log('SW registration failed: ', registrationError);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
