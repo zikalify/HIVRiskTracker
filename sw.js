@@ -1,11 +1,20 @@
-const CACHE_NAME = 'hiv-risk-tracker-v5';
+const CACHE_NAME = 'hiv-risk-tracker-v6';
 const ASSETS = [
   './',
+  './?source=pwa',
+  './?action=new-encounter',
   'index.html',
   'style.css',
   'app.js',
   'manifest.json',
-  'icons/icon.svg'
+  'icons/icon.svg',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/icon-maskable-192.png',
+  'icons/icon-maskable-512.png',
+  'icons/apple-touch-icon.png',
+  'icons/favicon-32.png',
+  'icons/notification-badge.png'
 ];
 
 // External assets that should also be cached
@@ -41,6 +50,24 @@ self.addEventListener('activate', event => {
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (const client of windowClients) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow('./?source=notification');
+      }
+    })
+  );
 });
 
 // Fetch Event

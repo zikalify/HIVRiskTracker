@@ -77,6 +77,11 @@ const btnExportData = document.getElementById('btn-export-data');
 const btnImportTrigger = document.getElementById('btn-import-trigger');
 const importFileInput = document.getElementById('import-file');
 
+const APP_NOTIFICATION_OPTIONS = {
+    icon: 'icons/icon-192.png',
+    badge: 'icons/notification-badge.png'
+};
+
 // Initialize
 function init() {
     loadState();
@@ -88,6 +93,7 @@ function init() {
     if(typeof updateDropdownText === 'function') updateDropdownText();
     updateDashboard();
     renderEncounters();
+    handleLaunchActions();
 }
 
 function toggleCircumcisionVisibility() {
@@ -163,6 +169,26 @@ function refreshApp() {
     }
 
     if(typeof updateDropdownText === 'function') updateDropdownText();
+}
+
+function openNewEncounterModal() {
+    editingEncounterId = null;
+    document.getElementById('modal-title').textContent = "Log Encounter";
+    document.getElementById('btn-submit-encounter').textContent = "Save Encounter";
+    encounterForm.reset();
+
+    const today = new Date().toISOString().split('T')[0];
+    encounterDateInput.value = today;
+
+    partnerPrepGroup.style.display = 'block';
+    encounterModal.classList.add('active');
+}
+
+function handleLaunchActions() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'new-encounter') {
+        openNewEncounterModal();
+    }
 }
 
 function loadState() {
@@ -262,17 +288,7 @@ function setupEventListeners() {
 
     // Modal
     btnNewEncounter.addEventListener('click', () => { 
-        editingEncounterId = null;
-        document.getElementById('modal-title').textContent = "Log Encounter";
-        document.getElementById('btn-submit-encounter').textContent = "Save Encounter";
-        encounterForm.reset();
-        
-        // Default date to today
-        const today = new Date().toISOString().split('T')[0];
-        encounterDateInput.value = today;
-        
-        partnerPrepGroup.style.display = 'block';
-        encounterModal.classList.add('active'); 
+        openNewEncounterModal();
     });
     btnCloseModal.addEventListener('click', () => { encounterModal.classList.remove('active'); });
     window.addEventListener('click', (e) => {
@@ -296,7 +312,11 @@ function setupEventListeners() {
     btnRequestNotifications.addEventListener('click', async () => {
         const granted = await requestNotificationPermission();
         if (granted) {
-            new Notification("HIV Risk Tracker", { body: "Notifications are now enabled and working!", icon: "icons/icon.svg" });
+            await showAppNotification("HIV Risk Tracker", {
+                body: "Notifications are now enabled and working!",
+                tag: 'hiv-risk-tracker-test'
+            });
+            updateReminderUI();
         }
     });
 
@@ -776,6 +796,21 @@ async function requestNotificationPermission() {
     }
 }
 
+async function showAppNotification(title, options = {}) {
+    if (!('serviceWorker' in navigator)) {
+        new Notification(title, { ...APP_NOTIFICATION_OPTIONS, ...options });
+        return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification(title, {
+        ...APP_NOTIFICATION_OPTIONS,
+        tag: 'hiv-risk-tracker',
+        renotify: false,
+        ...options
+    });
+}
+
 function updateReminderUI() {
     if (!reminderStatusText) return;
     
@@ -815,9 +850,8 @@ function triggerReminderCheck() {
 
     // If it's been > 24h since last log AND > 24h since last reminder
     if ((now.getTime() - lastLogDate > oneDay) && (now.getTime() - lastReminder > oneDay)) {
-        new Notification("HIV Risk Tracker Reminder", {
+        showAppNotification("HIV Risk Tracker Reminder", {
             body: "It's been over 24 hours since your last entry. Keep your tracking accurate by logging any recent activity.",
-            icon: "icons/icon.svg",
             tag: "daily-reminder"
         });
         

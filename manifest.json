@@ -1,27 +1,57 @@
 {
-  "id": "hiv-risk-tracker-pwa-unique-id-v1",
+  "id": "./?app-id=hiv-risk-tracker",
   "name": "HIV Risk Tracker",
   "short_name": "HIV Tracker",
-  "description": "Offline HIV Risk Tracking App based on WHO standards",
-  "start_url": "./index.html",
+  "description": "Offline HIV risk tracking and reminder app based on WHO standards.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#0f111a",
   "theme_color": "#0f111a",
   "categories": ["health", "medical", "lifestyle"],
   "icons": [
     {
-      "src": "icons/icon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Encounter",
+      "short_name": "New Encounter",
+      "description": "Open the tracker and log a new encounter.",
+      "url": "./?action=new-encounter",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "prefer_related_applications": false
