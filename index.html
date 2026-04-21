@@ -132,10 +132,15 @@
                             <span>Taking daily Pre-Exposure Prophylaxis.</span>
                         </div>
                     </div>
-                    <div class="form-group" id="prep-start-group" style="margin-top: 16px; display: none;">
-                        <label for="user-prep-start-date">PrEP Start Date (Optional)</label>
-                        <input type="date" id="user-prep-start-date">
-                        <p class="test-disclaimer">Helpful for showing whether you started recently, but you can leave this blank.</p>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="user-pep">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="toggle-text">
+                            <strong>I am taking PEP</strong>
+                            <span>Post-Exposure Prophylaxis after a possible HIV exposure.</span>
+                        </div>
                     </div>
                     <div class="toggle-group" id="circumcision-group" style="display: none;">
                         <label class="toggle-switch">
@@ -186,15 +191,26 @@
                 <div class="glass-card settings-card">
                     <h3>Testing & Screening</h3>
                     <div class="screening-info" style="display:flex; flex-direction:column; gap:10px;">
-                        <p>Latest HIV Test: <strong id="latest-hiv-test-display">No HIV test logged</strong></p>
-                        <p>Latest STI Panel: <strong id="latest-sti-panel-display">No STI panel logged</strong></p>
+                        <label style="margin:0;">Latest Recorded Results</label>
+                        <div id="latest-test-results-list" style="display:grid; gap:8px;">
+                            <p>HIV: <strong id="latest-hiv-test-display">No result logged</strong></p>
+                            <p>Gonorrhea: <strong id="latest-gonorrhea-display">No result logged</strong></p>
+                            <p>Chlamydia: <strong id="latest-chlamydia-display">No result logged</strong></p>
+                            <p>Syphilis: <strong id="latest-syphilis-display">No result logged</strong></p>
+                            <p>Hep B: <strong id="latest-hep-b-display">No result logged</strong></p>
+                            <p>Hep C: <strong id="latest-hep-c-display">No result logged</strong></p>
+                        </div>
                     </div>
                     <div class="form-group" style="margin-top:20px;">
                         <label>Log Test Result</label>
                         <div style="display:grid; gap:10px;">
                             <select id="test-type-select">
-                                <option value="hiv">HIV Test</option>
-                                <option value="sti_panel">Full STI Panel</option>
+                                <option value="hiv">HIV</option>
+                                <option value="gonorrhea">Gonorrhea</option>
+                                <option value="chlamydia">Chlamydia</option>
+                                <option value="syphilis">Syphilis</option>
+                                <option value="hep_b">Hep B</option>
+                                <option value="hep_c">Hep C</option>
                             </select>
                             <input type="date" id="log-test-date">
                             <select id="test-result-select"></select>
