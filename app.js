@@ -648,7 +648,34 @@ function handleLaunchActions() {
 function loadState() {
     const saved = localStorage.getItem('hivRiskState');
     if (saved) {
-        state = JSON.parse(saved);
+        try {
+            state = JSON.parse(saved);
+        } catch (e) {
+            console.error('Failed to parse saved state, resetting to defaults:', e);
+            // Reset to default state if parsing fails
+            state = {
+                profile: {
+                    gender: 'cis_male',
+                    hasSexWith: [],
+                    role: 'versatile',
+                    onPrep: false,
+                    onPep: false,
+                    pepStartDate: null,
+                    hepBVaccinated: false,
+                    circumcised: false,
+                    sti: false,
+                    newPartners: false,
+                    pwid: false,
+                    isVirgin: true
+                },
+                encounters: [],
+                tests: [],
+                settings: {
+                    remindersEnabled: false,
+                    lastReminderDate: null
+                }
+            };
+        }
     }
 
     ensureStateShape();
@@ -1559,3 +1586,4 @@ function importData(file) {
 
 // Start
 init();
+

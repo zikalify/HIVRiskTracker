@@ -1,20 +1,20 @@
-const CACHE_NAME = 'hiv-risk-tracker-v21';
+const CACHE_NAME = 'hiv-risk-tracker-v23';
 const ASSETS = [
-  './',
-  './?source=pwa',
-  './?action=new-encounter',
-  'index.html',
-  'style.css',
-  'app.js',
-  'manifest.json',
-  'icons/icon.svg',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/icon-maskable-192.png',
-  'icons/icon-maskable-512.png',
-  'icons/apple-touch-icon.png',
-  'icons/favicon-32.png',
-  'icons/notification-badge.png'
+  '/HIVRiskTracker/',
+  '/HIVRiskTracker/?source=pwa',
+  '/HIVRiskTracker/?action=new-encounter',
+  '/HIVRiskTracker/index.html',
+  '/HIVRiskTracker/style.css',
+  '/HIVRiskTracker/app.js',
+  '/HIVRiskTracker/manifest.json',
+  '/HIVRiskTracker/icons/icon.svg',
+  '/HIVRiskTracker/icons/icon-192.png',
+  '/HIVRiskTracker/icons/icon-512.png',
+  '/HIVRiskTracker/icons/icon-maskable-192.png',
+  '/HIVRiskTracker/icons/icon-maskable-512.png',
+  '/HIVRiskTracker/icons/apple-touch-icon.png',
+  '/HIVRiskTracker/icons/favicon-32.png',
+  '/HIVRiskTracker/icons/notification-badge.png'
 ];
 
 // External assets that should also be cached
@@ -103,7 +103,7 @@ self.addEventListener('fetch', event => {
           }
         ).catch(() => {
           if (event.request.mode === 'navigate') {
-            return caches.match('index.html') || caches.match('./');
+            return caches.match('/HIVRiskTracker/index.html') || caches.match('/HIVRiskTracker/');
           }
         });
       })

@@ -1,12 +1,12 @@
 {
-  "id": "./?app-id=hiv-risk-tracker",
+  "id": "/HIVRiskTracker/?app-id=hiv-risk-tracker",
   "name": "HIV Risk Tracker",
   "short_name": "HIV Risk",
   "description": "Offline HIV risk tracking and reminder app based on WHO standards.",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "./?source=pwa",
-  "scope": "./",
+  "start_url": "/HIVRiskTracker/?source=pwa",
+  "scope": "/HIVRiskTracker/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
@@ -15,25 +15,25 @@
   "categories": ["health", "medical", "lifestyle"],
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "/HIVRiskTracker/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "/HIVRiskTracker/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-maskable-192.png",
+      "src": "/HIVRiskTracker/icons/icon-maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "icons/icon-maskable-512.png",
+      "src": "/HIVRiskTracker/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -44,10 +44,10 @@
       "name": "New Encounter",
       "short_name": "New Encounter",
       "description": "Open the tracker and log a new encounter.",
-      "url": "./?action=new-encounter",
+      "url": "/HIVRiskTracker/?action=new-encounter",
       "icons": [
         {
-          "src": "icons/icon-192.png",
+          "src": "/HIVRiskTracker/icons/icon-192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
