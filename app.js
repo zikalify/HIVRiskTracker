@@ -878,15 +878,16 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
     if (condomUse === 'yes' && riskCategory > 0) {
         riskCategory = 0.5; // Reduces any higher risk to very low
     } else if (condomUse === 'broke' && riskCategory > 0) {
-        // Stays at category or slightly elevated context
+        riskCategory *= 1.2; // WHO: 20% increase due to failure awareness
     }
 
     // Multipliers for clinical context
     let multiplier = 1.0;
     
     // Circumcision reduces acquisition risk for men during insertive vaginal sex (WHO)
-    if (state.profile.gender === 'cis_male' && state.profile.circumcised && actType === 'insertive_vaginal') {
-        multiplier *= 0.4; // ~60% reduction
+    if (state.profile.gender === 'cis_male' && state.profile.circumcised && 
+        (actType === 'insertive_vaginal' || actType === 'insertive_anal')) {
+        multiplier *= 0.4; // WHO: ~60% reduction for both vaginal and anal insertive sex
     }
 
     if (partnerStatus === 'positive_detectable') multiplier *= 1.5;
@@ -899,6 +900,9 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
     if (state.profile.sti || partnerSti === 'yes') {
         multiplier *= 1.3;
     }
+
+    // WHO-aligned: Cap multiplier to prevent excessive risk inflation
+    if (multiplier > 2.0) multiplier = 2.0;
 
     // Final internal score for dashboard logic
     return riskCategory * multiplier;
@@ -994,12 +998,29 @@ function updateGuidance() {
 
         if (latestHivTest?.result === 'positive') return;
 
-        // Emergency PEP logic (within 72 hours)
-        if (diffHours <= 72 && enc.riskScore >= 1.0) {
+        // Emergency PEP logic (within 72 hours) - WHO aligned
+        const isHighRiskExposure = enc.actType === 'receptive_anal' || enc.actType === 'shared_needles';
+        const isKnownPositivePartner = enc.partnerStatus === 'positive_detectable';
+        const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
+                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes');
+        
+        if (diffHours <= 72 && (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors)) {
+            let pepReason = '';
+            if (isHighRiskExposure) {
+                pepReason = 'high-risk exposure';
+            } else if (isKnownPositivePartner) {
+                pepReason = 'exposure to HIV-positive partner';
+            } else {
+                pepReason = 'moderate-risk exposure with additional risk factors';
+            }
+            
             level1.push(`<li style="background: rgba(255, 59, 48, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; margin-bottom: 10px; list-style:none;">
                 <strong style="color:var(--danger-color)">EMERGENCY PEP WINDOW:</strong>
-                You had a higher-risk exposure within the last 72 hours. WHO recommends <strong>PEP (Post-Exposure Prophylaxis)</strong> as soon as possible, ideally within 24 hours. Seek clinical care immediately.
+                You had a ${pepReason} within the last 72 hours. WHO recommends <strong>PEP (Post-Exposure Prophylaxis)</strong> as soon as possible, ideally within 24 hours. Seek clinical care immediately.
             </li>`);
+        } else if (diffHours <= 72 && enc.riskScore >= 2.0) {
+            // For moderate risk exposures that don't meet PEP criteria
+            level2.push(`<li><strong style="color:var(--warning-color)">Recent Exposure:</strong> You had a recent exposure within the last 72 hours. While PEP may not be routinely recommended for this type of exposure, consult with a healthcare provider to assess your individual risk and discuss PEP options.</li>`);
         } else if (diffHours <= 720 && enc.riskScore >= 1.0) {
             level2.push('<li><strong style="color:var(--warning-color)">Testing Timeline:</strong> You had a notable exposure recently. Schedule an HIV test now.</li>');
         }
@@ -1149,7 +1170,12 @@ function updateDashboard() {
     const now = new Date();
     const hasEmergencyPEPWindow = relevantEncounters.some(enc => {
         const diffHours = (now - new Date(enc.date)) / (1000 * 60 * 60);
-        return diffHours <= 72 && enc.riskScore >= 1.0;
+        const isHighRiskExposure = enc.actType === 'receptive_anal' || enc.actType === 'shared_needles';
+        const isKnownPositivePartner = enc.partnerStatus === 'positive_detectable';
+        const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') && 
+                                          (enc.partnerStatus === 'positive_detectable' || state.profile.sti || enc.partnerSti === 'yes');
+        
+        return diffHours <= 72 && (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors);
     });
 
     if (state.profile.onPep && latestHivTest?.result !== 'positive') {

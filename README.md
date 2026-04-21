@@ -39,8 +39,17 @@ Backups can be restored at any time. The app performs a validation check to ensu
 - **Icons**: Comprehensive PWA icon set (192px, 512px, maskable variants) for optimal display across devices.
 - **Notifications**: Web Notifications API for daily reminders with service worker integration.
 
+## 🚀 Try It Online
+
+**Live Demo:** https://zikalify.github.io/HIVRiskTracker/
+
 ## 🚀 Installation & Usage
 
+**Option 1: Use the Live Demo**
+- Visit the link above in any modern browser
+- No installation required
+
+**Option 2: Local Installation**
 1. **Clone the repository** to your local machine.
 2. **Open `index.html`** in a modern browser.
 3. **Install as PWA**: For the best experience, use the "Add to Home Screen" or "Install App" option in your browser menu.

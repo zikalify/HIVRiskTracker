@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PEP Logic Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-case { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .urgent { background: #ffebee; border-color: #f44336; }
+        .warning { background: #fff3e0; border-color: #ff9800; }
+        .routine { background: #e8f5e8; border-color: #4caf50; }
+    </style>
+</head>
+<body>
+    <h1>PEP Logic Test</h1>
+    <div id="test-results"></div>
+    
+    <script>
+        // Simulate PEP logic from app.js (updated)
+        function testPEPLogic(actType, partnerStatus, hasSTI, partnerHasSTI, riskScore) {
+            const isHighRiskExposure = actType === 'receptive_anal' || actType === 'shared_needles';
+            const isKnownPositivePartner = partnerStatus === 'positive_detectable';
+            const isModerateRiskWithFactors = (actType === 'receptive_vaginal' || actType === 'insertive_anal') && 
+                                              (partnerStatus === 'positive_detectable' || hasSTI || partnerHasSTI);
+            
+            if (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors) {
+                return 'urgent';
+            } else if (riskScore >= 2.0) {
+                return 'warning';
+            }
+            return 'routine';
+        }
+        
+        // Risk score calculation from app.js
+        function calculateRiskScore(actType, condomUse) {
+            let riskCategory = 0;
+            switch(actType) {
+                case 'receptive_anal':
+                case 'shared_needles':
+                    riskCategory = 3; 
+                    break;
+                case 'insertive_anal':
+                case 'receptive_vaginal':
+                    riskCategory = 2;
+                    break;
+                case 'insertive_vaginal':
+                    riskCategory = 1;
+                    break;
+                case 'giving_oral':
+                    riskCategory = 0.5;
+                    break;
+                case 'receiving_oral':
+                default:
+                    riskCategory = 0;
+                    break;
+            }
+            
+            if (condomUse === 'no' && riskCategory > 0) {
+                // No change for no condom
+            } else if (condomUse === 'yes' && riskCategory > 0) {
+                riskCategory = 0.5;
+            }
+            
+            return riskCategory;
+        }
+        
+        // Test cases
+        const testCases = [
+            { act: 'receptive_anal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Receptive anal, unknown status' },
+            { act: 'shared_needles', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Shared needles' },
+            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Receptive vaginal, unknown status (original issue)' },
+            { act: 'receptive_vaginal', partner: 'positive_detectable', hasSTI: false, partnerSTI: false, desc: 'Receptive vaginal, known positive partner' },
+            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: true, partnerSTI: false, desc: 'Receptive vaginal, user has STI' },
+            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: true, desc: 'Receptive vaginal, partner has STI' },
+            { act: 'insertive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Insertive vaginal, unknown status' },
+            { act: 'giving_oral', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Giving oral sex' }
+        ];
+        
+        const results = document.getElementById('test-results');
+        
+        testCases.forEach(test => {
+            const riskScore = calculateRiskScore(test.act, 'no'); // Assuming no condom for worst case
+            const result = testPEPLogic(test.act, test.partner, test.hasSTI, test.partnerSTI, riskScore);
+            const div = document.createElement('div');
+            div.className = `test-case ${result}`;
+            div.innerHTML = `
+                <strong>${test.desc}</strong><br>
+                Act: ${test.act}, Partner: ${test.partner}, User STI: ${test.hasSTI}, Partner STI: ${test.partnerSTI}<br>
+                Risk Score: ${riskScore}, Result: <strong>${result.toUpperCase()}</strong>
+            `;
+            results.appendChild(div);
+        });
+    </script>
+</body>
+</html>
