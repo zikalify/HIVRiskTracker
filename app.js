@@ -413,7 +413,7 @@ function renderTestingUI() {
     latestGonorrheaDisplay.textContent = formatTestSummary(latestTests.gonorrhea) || 'No result logged';
     latestChlamydiaDisplay.textContent = formatTestSummary(latestTests.chlamydia) || 'No result logged';
     latestSyphilisDisplay.textContent = formatTestSummary(latestTests.syphilis) || 'No result logged';
-    latestHepBDisplay.textContent = formatTestSummary(latestTests.hep_b) || 'No result logged';
+    latestHepBDisplay.textContent = formatTestSummary(latestTests.hep_b) || (state.profile.hepBVaccinated ? 'Vaccinated' : 'No result logged');
     latestHepCDisplay.textContent = formatTestSummary(latestTests.hep_c) || 'No result logged';
 
     const sortedTests = sortTestsDescending(state.tests);
@@ -516,10 +516,12 @@ function getProfileRiskFactors() {
 }
 
 function refreshApp() {
+    syncVirginState();
     updateDashboard();
     renderEncounters();
     updateGuidance();
     renderTestingUI();
+    updateVirginControl();
 
     if(typeof updateDropdownText === 'function') updateDropdownText();
 }
@@ -552,6 +554,7 @@ function loadState() {
 
     ensureStateShape();
     migrateLegacyState();
+    syncVirginState();
     
     // Populate form fields
     userGender.value = state.profile.gender || 'cis_male';
@@ -567,6 +570,7 @@ function loadState() {
     userSti.checked = state.profile.sti || false;
     userPwid.checked = state.profile.pwid || false;
     userVirgin.checked = state.profile.isVirgin !== undefined ? state.profile.isVirgin : true;
+    updateVirginControl();
     logTestDateInput.value = new Date().toISOString().split('T')[0];
     populateTestResultOptions();
 
@@ -575,8 +579,26 @@ function loadState() {
 }
 
 function saveState() {
+    syncVirginState();
     localStorage.setItem('hivRiskState', JSON.stringify(state));
     refreshApp();
+}
+
+function syncVirginState() {
+    if (hasSexualExposure(state.encounters)) {
+        state.profile.isVirgin = false;
+    }
+}
+
+function updateVirginControl() {
+    const hasRecordedSexualHistory = hasSexualExposure(state.encounters);
+    userVirgin.disabled = hasRecordedSexualHistory;
+
+    if (hasRecordedSexualHistory) {
+        userVirgin.checked = false;
+    } else {
+        userVirgin.checked = state.profile.isVirgin !== undefined ? state.profile.isVirgin : true;
+    }
 }
 
 function setupEventListeners() {
@@ -1161,8 +1183,6 @@ function updateGuidance() {
 
     if (shouldSuggestHepBVaccine) {
         level3.push('<li><strong style="color:var(--accent-color)">Hep B Vaccine:</strong> WHO recommends hepatitis B vaccination for higher-risk groups, including people with multiple sexual partners and people who inject drugs. If you have not had the vaccine, ask a clinician or vaccination service about getting the full series.</li>');
-    } else if (state.profile.hepBVaccinated) {
-        level3.push('<li><strong style="color:var(--success-color)">Hep B Vaccine Logged:</strong> You marked that you have had the hepatitis B vaccine, so routine follow-up can focus on your other logged infections and exposures.</li>');
     }
 
     if (state.profile.pwid) {
