@@ -52,10 +52,6 @@
                     </svg>
                 </div>
                 <p id="risk-description" class="risk-description">You are taking excellent precautions. Continue your current practices.</p>
-                <div class="test-action">
-                    <button id="btn-test-negative" class="btn primary-btn"><span class="material-symbols-rounded">medical_services</span> Log Negative Test</button>
-                    <p class="test-disclaimer">Resets baseline after confirming status.</p>
-                </div>
             </div>
             <div id="personal-guidance-card" class="glass-card guidance-card" style="margin-top: 20px;">
                 <h3>Personal Guidance</h3>
@@ -183,7 +179,7 @@
                 </div>
 
                 <div class="glass-card settings-card">
-                    <h3>My Screening History</h3>
+                    <h3>Testing & Screening</h3>
                     <div class="screening-info" style="display:flex; justify-content:space-between; align-items:center;">
                         <p>Last Full STI Panel (HIV, Syphilis, Gonorrhea, Chlamydia): <strong id="last-sti-date-display">Never logged</strong></p>
                         <button id="btn-clear-sti-panel" class="btn delete-btn" style="padding: 5px; display: none;" title="Clear Entry"><span class="material-symbols-rounded">close</span></button>
@@ -194,7 +190,8 @@
                             <input type="date" id="log-sti-date" style="flex:1">
                             <button id="btn-log-sti-panel" class="btn primary-btn" style="padding: 10px 15px;"><span class="material-symbols-rounded">check_circle</span> Log</button>
                         </div>
-                        <p class="test-disclaimer">Resets counter for encounters since test.</p>
+                        <p class="test-disclaimer">This logs your most recent full panel and updates screening guidance without deleting encounter history.</p>
+                        <p class="test-disclaimer">Recent exposures can still matter for about 30 days because testing window periods and false negatives are possible, so the app keeps that caution visible in your guidance.</p>
                     </div>
                 </div>
             </div>

@@ -12,7 +12,6 @@ let state = {
         lastStiTestDate: null
     },
     encounters: [],
-    lastTestDate: null,
     settings: {
         remindersEnabled: false,
         lastReminderDate: null
@@ -55,7 +54,6 @@ const circumcisionGroup = document.getElementById('circumcision-group');
 // Form
 const encounterForm = document.getElementById('encounter-form');
 const encountersList = document.getElementById('encounters-list');
-const btnTestNegative = document.getElementById('btn-test-negative');
 const partnerStatusSelect = document.getElementById('partner-status');
 const partnerPrepGroup = document.getElementById('partner-prep-group');
 const partnerSti = document.getElementById('partner-sti');
@@ -393,17 +391,6 @@ function setupEventListeners() {
         editingEncounterId = null;
     });
 
-    // Test Negative
-    btnTestNegative.addEventListener('click', () => {
-        if(confirm("Logging a negative test clears old encounters. Encounters within the last 30 days will REMAIN on your dash due to testing window periods and potential false negatives. Proceed?")) {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - 30);
-            
-            state.encounters = state.encounters.filter(e => new Date(e.date) > cutoffDate);
-            state.lastTestDate = new Date().toISOString();
-            saveState();
-        }
-    });
 }
 
 function recalculateRiskHistory() {
