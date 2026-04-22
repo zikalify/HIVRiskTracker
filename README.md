@@ -7,11 +7,14 @@ A privacy-first, offline-ready Progressive Web App (PWA) side project for person
 ## 🌟 Key Features
 
 - **Risk Tracking**: Records encounters and calculates basic risk estimates based on partner status, gender identity, act type, and preventative measures (PrEP/Condoms/Circumcision) using publicly available health information.
+- **WHO-Aligned Clinical Logic**: Evidence-based guidance for PrEP eligibility, PEP triggers, vaccine recommendations, and testing windows following WHO guidelines.
 - **Privacy First**: 100% serverless. Your data never leaves your device. All information is stored locally in your browser's `localStorage`.
 - **Personal Reminders**: Provides general health reminders and basic guidance based on your logged information. This is not medical advice.
 - **Comprehensive Health Tracking**: Log and manage test results for HIV, Gonorrhea, Chlamydia, Syphilis, Hepatitis B & C, and Mpox with detailed result tracking and history.
 - **Clinical Factor Monitoring**: Track STI status, new partners, injection drug use, and other clinical factors that affect risk assessment.
-- **PEP Management**: Track Post-Exposure Prophylaxis with start date monitoring and 28-day course guidance.
+- **PrEP & PEP Management**: Track Pre-Exposure Prophylaxis (including on-demand 2-1-1 for MSM) and Post-Exposure Prophylaxis with start date monitoring and course guidance.
+- **U=U Awareness**: Serodiscordant couple guidance highlighting that Undetectable = Untransmittable for HIV-positive partners on treatment.
+- **Smart Validation**: Anatomical plausibility checks, future date prevention, and comprehensive schema validation for data imports.
 - **Data Portability**: Full Export/Import functionality. Move your health history between devices securely via JSON backups with validation.
 - **Daily Reminders**: Optional system notifications to help you stay consistent with your logs.
 - **Offline Ready**: Works without an internet connection once installed, thanks to Service Worker integration with intelligent caching.
@@ -29,7 +32,10 @@ This personal project is built with these principles:
 Users can download their entire profile and history as a `.json` file from the **Settings** tab. This allows for manual backups and migration to other browsers.
 
 ### Importing Data
-Backups can be restored at any time. The app performs a validation check to ensure the file integrity before overwriting the local state. **Note: Importing will overwrite your current local data.**
+Backups can be restored at any time. The app performs comprehensive schema validation to ensure file integrity and prevent corrupted data from being imported. **Note: Importing will overwrite your current local data.**
+
+### Data Security Note
+This app stores data locally in your browser using `localStorage`. Export files are **unencrypted JSON** by design — this allows for easy backup and migration, but means anyone with access to your export file can read its contents. Keep your export files secure and private.
 
 ## 🛠️ Tech Stack
 
