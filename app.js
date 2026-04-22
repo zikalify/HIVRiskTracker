@@ -536,10 +536,14 @@ function getRecommendedFollowUpTests() {
         }
         
         // Syphilis has broader WHO screening guidance - recommend for new partners or any sexual exposure
+        // But still respect condom use and partner status to avoid over-triggering
         const shouldRecommendSyphilis = state.encounters.some(enc => {
             const hasPartnerRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
             const isPenetrativeAct = ['receptive_anal', 'insertive_anal', 'receptive_vaginal', 'insertive_vaginal'].includes(enc.actType);
-            return hasPartnerRisk || isPenetrativeAct;
+            const noCondom = enc.condomUse !== 'yes';
+            const partnerHasSti = enc.partnerSti === 'yes';
+            // Only recommend syphilis testing if penetrative act AND (partner risk OR no condom OR partner STI)
+            return isPenetrativeAct && (hasPartnerRisk || noCondom || partnerHasSti);
         }) || state.profile.newPartners;
         
         if (shouldRecommendSyphilis && shouldRetestAfterEncounter('syphilis')) {
@@ -699,15 +703,16 @@ function toggleCircumcisionVisibility() {
 function isKeyPopulationEncounter(uGender, pGender) {
     if (!uGender || !pGender) return false;
     
-    const isUserMale = (uGender === 'cis_male' || uGender === 'trans_male');
-    // Note: trans_male removed from isPartnerMale - cis woman + trans man is NOT MSM network per WHO
+    // Issue D fix: Include non-binary users in MSM-adjacent classification
+    // Non-binary people who have sex with men are in the same epidemiological network as MSM
+    const isUserMaleOrNB = (uGender === 'cis_male' || uGender === 'trans_male' || uGender === 'non_binary');
     const isPartnerMale = (pGender === 'cis_male' || pGender === 'non_binary');
     const isUserTrans = uGender.startsWith('trans_');
     const isPartnerTrans = pGender.startsWith('trans_');
 
-    // 1. MSM Network (Cis/Trans Men who have sex with cis men or NB)
-    // Trans men are in different transmission network than cis men for HIV purposes
-    if (isUserMale && isPartnerMale) return true;
+    // 1. MSM Network (Cis/Trans Men + Non-binary who have sex with cis men or NB)
+    // WHO increasingly interprets MSM key population guidance to include non-binary people who have sex with men
+    if (isUserMaleOrNB && isPartnerMale) return true;
     
     // 2. Interaction with Trans Women (Higher prevalence group globally)
     if (pGender === 'trans_female') return true;
@@ -765,7 +770,8 @@ function classifyPEPEligibility(enc) {
 
     // Moderate-risk exposures with additional risk factors
     // Note: Uses PARTNER's STI status and condom use, NOT user's own STI status (WHO aligned)
-    const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal') &&
+    // Issue A fix: Added insertive_vaginal — unprotected insertive vaginal with unknown status is WHO PEP-eligible
+    const isModerateRiskWithFactors = (enc.actType === 'receptive_vaginal' || enc.actType === 'insertive_anal' || enc.actType === 'insertive_vaginal') &&
                                         (enc.partnerStatus === 'positive_detectable' ||
                                          enc.partnerSti === 'yes' ||
                                          enc.condomUse !== 'yes');
@@ -796,8 +802,18 @@ function getProfileRiskFactors() {
     // 2. Transgender Women (Highest prevalence group globally)
     const isTransWoman = (uGender === 'trans_female');
 
+    // Issue B fix: Heterosexual women at substantial risk (unknown-status partners)
+    // WHO recommends PrEP for heterosexual women with partners of unknown HIV status
+    const isHeterosexualWomanAtRisk = (uGender === 'cis_female') &&
+                                       state.encounters &&
+                                       state.encounters.some(enc => 
+                                           enc.partnerGender === 'cis_male' && 
+                                           enc.partnerStatus === 'unknown'
+                                       );
+
     if (isMSM) factors.push('msm');
     if (isTransWoman) factors.push('trans_woman');
+    if (isHeterosexualWomanAtRisk) factors.push('heterosexual_woman_at_risk');
     if (state.profile.pwid) factors.push('pwid');
     if (state.profile.sti) factors.push('active_sti');
     if (state.profile.newPartners) factors.push('new_partners');
@@ -886,14 +902,34 @@ function loadState() {
     pepDateGroup.style.display = userPep.checked ? 'block' : 'none';
     
     // PrEP type selector
+    // Issue C fix: On-demand PrEP (2-1-1) is only validated for MSM per WHO 2022 guidance
     const prepTypeGroup = document.getElementById('prep-type-group');
     const prepTypeSelect = document.getElementById('prep-type');
     const prepTypeHelp = document.getElementById('prep-type-help');
+    
+    // Check if user is MSM (men who have sex with men)
+    const uGender = state.profile.gender;
+    const hasSexWith = state.profile.hasSexWith || [];
+    const isMSM = (uGender === 'cis_male' || uGender === 'trans_male') && 
+                  (hasSexWith.some(p => ['cis_male', 'trans_male', 'non_binary'].includes(p)));
+    
+    // Force non-MSM users to daily PrEP (on-demand only validated for MSM)
+    if (!isMSM && state.profile.prepType === 'on_demand') {
+        state.profile.prepType = 'daily';
+        if (prepTypeSelect) prepTypeSelect.value = 'daily';
+    }
+    
+    // Hide on-demand option for non-MSM users
+    if (prepTypeSelect && !isMSM) {
+        const onDemandOption = prepTypeSelect.querySelector('option[value="on_demand"]');
+        if (onDemandOption) onDemandOption.style.display = 'none';
+    }
+    
     if (prepTypeGroup) prepTypeGroup.style.display = userPrep.checked ? 'block' : 'none';
     if (prepTypeSelect) prepTypeSelect.value = state.profile.prepType || 'daily';
     if (prepTypeHelp) {
         prepTypeHelp.textContent = state.profile.prepType === 'on_demand' 
-            ? 'On-demand (2-1-1): Take 2 pills 2-24 hours before sex, 1 pill 24 hours after, and 1 pill 24 hours later. Effective for MSM when taken correctly.'
+            ? 'On-demand (2-1-1): Take 2 pills 2-24 hours BEFORE sex, 1 pill 24 hours after, and 1 pill 24 hours later. Protection ONLY achieved with correct pre-exposure dosing. If you missed the pre-exposure doses, protection may be reduced.'
             : 'Daily PrEP provides continuous protection when taken consistently.';
     }
     userHepBVax.checked = state.profile.hepBVaccinated || false;
@@ -1372,6 +1408,7 @@ function updateGuidance() {
 
     const isPrEPCandidate = profileFactors.includes('msm') ||
         profileFactors.includes('trans_woman') ||
+        profileFactors.includes('heterosexual_woman_at_risk') ||
         profileFactors.includes('pwid') ||
         profileFactors.includes('active_sti') ||
         profileFactors.includes('new_partners');
@@ -1483,6 +1520,7 @@ function updateGuidance() {
             const factorLabels = {
                 msm: 'Men who have sex with men (MSM)',
                 trans_woman: 'Transgender Women',
+                heterosexual_woman_at_risk: 'Heterosexual women with partners of unknown HIV status',
                 pwid: 'People who inject drugs',
                 active_sti: 'Active STI history',
                 new_partners: 'New or changing partners'

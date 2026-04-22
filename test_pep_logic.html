@@ -12,80 +12,93 @@
 </head>
 <body>
     <h1>PEP Logic Test</h1>
+    <p><em>Updated to match classifyPEPEligibility() from app.js</em></p>
     <div id="test-results"></div>
     
     <script>
-        // Simulate PEP logic from app.js (updated)
-        function testPEPLogic(actType, partnerStatus, hasSTI, partnerHasSTI, riskScore) {
-            const isHighRiskExposure = actType === 'receptive_anal' || actType === 'shared_needles';
+        /**
+         * WHO-aligned PEP Eligibility Classification (matches app.js classifyPEPEligibility)
+         * Key fixes:
+         * - Issue 4: Only uses PARTNER's STI status, NOT user's own STI status (WHO aligned)
+         * - Issue 3: Only cis women excluded from biological risk for receptive acts (not trans women)
+         * - Includes condom use and partner status as risk factors
+         */
+        function classifyPEPEligibility(actType, partnerStatus, partnerGender, partnerHasSTI, condomUse, hoursSinceEncounter) {
+            // Only consider exposures within 72-hour PEP window
+            if (hoursSinceEncounter > 72) {
+                return { shouldRecommendPEP: false, isWithinWindow: false, reason: null };
+            }
+
+            // Only recommend PEP when there's actual biological HIV risk
+            const hasHivRisk = partnerStatus !== 'negative' && partnerStatus !== 'positive_undetectable';
+            if (!hasHivRisk) {
+                return { shouldRecommendPEP: false, isWithinWindow: true, reason: null };
+            }
+
+            // Consider biological reality for PEP recommendations
+            const isPartnerCisFemale = partnerGender === 'cis_female';
+
+            // No biological HIV risk scenarios (only for cis female partners):
+            // 1. Receptive anal with cis female partner (pegging) - no biological exposure
+            // 2. Receptive vaginal with cis female partner - user is insertive male, no receptive exposure
+            // Note: Trans women are NOT excluded - surgical status varies
+            const hasBiologicalRisk = !((actType === 'receptive_anal' && isPartnerCisFemale) ||
+                                       (actType === 'receptive_vaginal' && isPartnerCisFemale));
+
+            if (!hasBiologicalRisk) {
+                return { shouldRecommendPEP: false, isWithinWindow: true, reason: null };
+            }
+
+            // High-risk exposures: receptive anal or shared needles
+            const isHighRiskExposure = (actType === 'receptive_anal' || actType === 'shared_needles');
+
+            // Known positive partner always warrants PEP consideration
             const isKnownPositivePartner = partnerStatus === 'positive_detectable';
-            const isModerateRiskWithFactors = (actType === 'receptive_vaginal' || actType === 'insertive_anal') && 
-                                              (partnerStatus === 'positive_detectable' || hasSTI || partnerHasSTI);
-            
-            if (isHighRiskExposure || isKnownPositivePartner || isModerateRiskWithFactors) {
-                return 'urgent';
-            } else if (riskScore >= 2.0) {
-                return 'warning';
+
+            // Moderate-risk exposures with additional risk factors
+            // Note: Only uses PARTNER's STI status and condom use, NOT user's own STI (WHO aligned)
+            const isModerateRiskWithFactors = (actType === 'receptive_vaginal' || actType === 'insertive_anal') &&
+                                                (partnerStatus === 'positive_detectable' ||
+                                                 partnerHasSTI ||
+                                                 condomUse !== 'yes');
+
+            if (isHighRiskExposure) {
+                return { shouldRecommendPEP: true, isWithinWindow: true, reason: 'high-risk exposure' };
+            } else if (isKnownPositivePartner) {
+                return { shouldRecommendPEP: true, isWithinWindow: true, reason: 'exposure to HIV-positive partner' };
+            } else if (isModerateRiskWithFactors) {
+                return { shouldRecommendPEP: true, isWithinWindow: true, reason: 'moderate-risk exposure with additional risk factors' };
             }
-            return 'routine';
+
+            return { shouldRecommendPEP: false, isWithinWindow: true, reason: null };
         }
         
-        // Risk score calculation from app.js
-        function calculateRiskScore(actType, condomUse) {
-            let riskCategory = 0;
-            switch(actType) {
-                case 'receptive_anal':
-                case 'shared_needles':
-                    riskCategory = 3; 
-                    break;
-                case 'insertive_anal':
-                case 'receptive_vaginal':
-                    riskCategory = 2;
-                    break;
-                case 'insertive_vaginal':
-                    riskCategory = 1;
-                    break;
-                case 'giving_oral':
-                    riskCategory = 0.5;
-                    break;
-                case 'receiving_oral':
-                default:
-                    riskCategory = 0;
-                    break;
-            }
-            
-            if (condomUse === 'no' && riskCategory > 0) {
-                // No change for no condom
-            } else if (condomUse === 'yes' && riskCategory > 0) {
-                riskCategory = 0.5;
-            }
-            
-            return riskCategory;
-        }
-        
-        // Test cases
+        // Test cases - updated to test the corrected logic
         const testCases = [
-            { act: 'receptive_anal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Receptive anal, unknown status' },
-            { act: 'shared_needles', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Shared needles' },
-            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Receptive vaginal, unknown status (original issue)' },
-            { act: 'receptive_vaginal', partner: 'positive_detectable', hasSTI: false, partnerSTI: false, desc: 'Receptive vaginal, known positive partner' },
-            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: true, partnerSTI: false, desc: 'Receptive vaginal, user has STI' },
-            { act: 'receptive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: true, desc: 'Receptive vaginal, partner has STI' },
-            { act: 'insertive_vaginal', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Insertive vaginal, unknown status' },
-            { act: 'giving_oral', partner: 'unknown', hasSTI: false, partnerSTI: false, desc: 'Giving oral sex' }
+            { act: 'receptive_anal', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'no', hours: 24, desc: 'Receptive anal, unknown status' },
+            { act: 'shared_needles', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'no', hours: 24, desc: 'Shared needles' },
+            { act: 'receptive_vaginal', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'no', hours: 24, desc: 'Receptive vaginal, unknown status (moderate risk)' },
+            { act: 'receptive_vaginal', partner: 'positive_detectable', gender: 'cis_male', partnerSTI: false, condom: 'yes', hours: 24, desc: 'Receptive vaginal, known positive partner (PEP recommended regardless of condom)' },
+            { act: 'receptive_vaginal', partner: 'unknown', gender: 'cis_male', partnerSTI: true, condom: 'no', hours: 24, desc: 'Receptive vaginal, partner has STI (PEP recommended)' },
+            { act: 'receptive_vaginal', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'yes', hours: 24, desc: 'Receptive vaginal, condom used, no partner STI (no PEP - protected)' },
+            { act: 'receptive_vaginal', partner: 'unknown', gender: 'cis_female', partnerSTI: false, condom: 'no', hours: 24, desc: 'Receptive vaginal with cis female partner (no biological risk - no PEP)' },
+            { act: 'insertive_vaginal', partner: 'unknown', gender: 'cis_female', partnerSTI: false, condom: 'no', hours: 24, desc: 'Insertive vaginal, unknown status' },
+            { act: 'giving_oral', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'no', hours: 24, desc: 'Giving oral sex (low risk)' },
+            { act: 'receptive_anal', partner: 'unknown', gender: 'cis_male', partnerSTI: false, condom: 'no', hours: 96, desc: 'Receptive anal after 96 hours (outside PEP window)' }
         ];
         
         const results = document.getElementById('test-results');
         
         testCases.forEach(test => {
-            const riskScore = calculateRiskScore(test.act, 'no'); // Assuming no condom for worst case
-            const result = testPEPLogic(test.act, test.partner, test.hasSTI, test.partnerSTI, riskScore);
+            const result = classifyPEPEligibility(test.act, test.partner, test.gender, test.partnerSTI, test.condom, test.hours);
+            const urgency = result.shouldRecommendPEP ? 'urgent' : (result.isWithinWindow ? 'routine' : 'warning');
             const div = document.createElement('div');
-            div.className = `test-case ${result}`;
+            div.className = `test-case ${urgency}`;
             div.innerHTML = `
                 <strong>${test.desc}</strong><br>
-                Act: ${test.act}, Partner: ${test.partner}, User STI: ${test.hasSTI}, Partner STI: ${test.partnerSTI}<br>
-                Risk Score: ${riskScore}, Result: <strong>${result.toUpperCase()}</strong>
+                Act: ${test.act}, Partner: ${test.partner} (${test.gender}), Partner STI: ${test.partnerSTI}, Condom: ${test.condom}, Hours: ${test.hours}<br>
+                <strong>PEP: ${result.shouldRecommendPEP ? 'RECOMMENDED' : 'Not recommended'}</strong>${result.reason ? ' - ' + result.reason : ''}
+                ${!result.isWithinWindow ? ' <em>(Outside 72h window)</em>' : ''}
             `;
             results.appendChild(div);
         });
