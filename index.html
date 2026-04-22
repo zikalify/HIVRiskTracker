@@ -144,6 +144,14 @@
                             <span>Taking daily Pre-Exposure Prophylaxis.</span>
                         </div>
                     </div>
+                    <div id="prep-type-group" class="form-group" style="display: none; margin-top: 10px; padding-left: 60px;">
+                        <label>PrEP Regimen</label>
+                        <select id="prep-type">
+                            <option value="daily">Daily (once-daily dosing)</option>
+                            <option value="on_demand">On-demand / Event-based (2-1-1)</option>
+                        </select>
+                        <p class="test-disclaimer" id="prep-type-help">Daily PrEP provides continuous protection when taken consistently.</p>
+                    </div>
                     <div class="toggle-group">
                         <label class="toggle-switch">
                             <input type="checkbox" id="user-pep">
@@ -347,9 +355,10 @@
                     </div>
                     <div class="form-group">
                         <label>Partner's HIV Status (If known)</label>
+                        <p class="test-disclaimer" style="margin-bottom: 5px;">"Confirmed Negative" assumes a recent test (within the window period). A partner who tested negative years ago but has had new exposures since may not be reliably negative.</p>
                         <select id="partner-status">
                             <option value="unknown">Unknown / Not Discussed</option>
-                            <option value="negative">Confirmed Negative</option>
+                            <option value="negative">Confirmed Negative (recent test)</option>
                             <option value="positive_undetectable">Positive (Undetectable / U=U)</option>
                             <option value="positive_detectable">Positive (Detectable / Not on Treatment)</option>
                         </select>
@@ -367,7 +376,7 @@
 
                     <div class="form-group">
                         <label>Type of Sex (Highest Risk Act)</label>
-                        <p class="test-disclaimer" style="margin-bottom: 5px;">Acts are listed from highest to lowest risk. Pick the single riskiest act performed during this encounter.</p>
+                        <p class="test-disclaimer" style="margin-bottom: 5px;">Acts are listed from highest to lowest per-act HIV risk (with untreated HIV-positive partner). Pick the single riskiest act performed during this encounter.</p>
                         <select id="act-type">
                             <option value="receptive_anal">Receiving Anal Sex (Partner performed it on me)</option>
                             <option value="shared_needles">Shared Injecting Equipment</option>
