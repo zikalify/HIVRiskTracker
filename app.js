@@ -476,8 +476,19 @@ function getRecommendedFollowUpTests() {
         const daysSinceTest = Math.floor((localNow - localTestDate) / (1000 * 60 * 60 * 24));
         const daysSinceLatestEncounter = Math.floor((localNow - localLatestEncounter) / (1000 * 60 * 60 * 24));
         
-        // If test was done before latest encounter, definitely need retest
-        if (localTestDate < localLatestEncounter) return true;
+        // If test was done before latest encounter, check if window clearance applies
+        // Window clearance: if all post-test encounters are with confirmed-negative/U=U partners,
+        // the negative test already covers them - no new test needed
+        if (localTestDate < localLatestEncounter) {
+            const postTestEncounters = state.encounters.filter(enc =>
+                new Date(enc.date) > localTestDate
+            );
+            const allCoveredByNegativeStatus = postTestEncounters.every(enc =>
+                enc.partnerStatus === 'negative' || enc.partnerStatus === 'positive_undetectable'
+            );
+            if (allCoveredByNegativeStatus) return false;
+            return true;
+        }
         
         // If test was done too early after exposure, may need repeat test
         const windowDays = WHO_TESTING_WINDOWS[type] || 42;
@@ -520,10 +531,10 @@ function getRecommendedFollowUpTests() {
             const isHighRiskAct = ['receptive_anal', 'insertive_anal', 'receptive_vaginal', 'insertive_vaginal'].includes(enc.actType);
             const partnerHasSti = enc.partnerSti === 'yes';
 
-            // Issue 10 fix: Only recommend testing if there's actual risk
-            // Risk factors: unknown/positive partner status, no condom, OR partner has STI
-            // Suppress for: confirmed-negative partner + condom used + no STI
-            const hasActualRisk = hasHivRisk || !condomUsed || partnerHasSti;
+            // Only recommend testing if there's actual risk
+            // Risk factors: unknown/positive partner status OR partner has STI
+            // Condom use alone with confirmed-negative partner is not a risk factor
+            const hasActualRisk = hasHivRisk || partnerHasSti;
             return isHighRiskAct && hasActualRisk;
         });
         
@@ -542,8 +553,9 @@ function getRecommendedFollowUpTests() {
             const isPenetrativeAct = ['receptive_anal', 'insertive_anal', 'receptive_vaginal', 'insertive_vaginal'].includes(enc.actType);
             const noCondom = enc.condomUse !== 'yes';
             const partnerHasSti = enc.partnerSti === 'yes';
-            // Only recommend syphilis testing if penetrative act AND (partner risk OR no condom OR partner STI)
-            return isPenetrativeAct && (hasPartnerRisk || noCondom || partnerHasSti);
+            // Only recommend syphilis testing if penetrative act AND (partner risk OR partner STI)
+            // Condom use alone with confirmed-negative partner is not a risk factor
+            return isPenetrativeAct && (hasPartnerRisk || partnerHasSti);
         }) || state.profile.newPartners;
         
         if (shouldRecommendSyphilis && shouldRetestAfterEncounter('syphilis')) {
@@ -1217,6 +1229,8 @@ function setupEventListeners() {
         
         const actualDate = encounterDate ? new Date(encounterDate).toISOString() : new Date().toISOString();
 
+        const isRegularPartner = document.getElementById('is-regular-partner').checked;
+
         const encounter = {
             id: editingEncounterId || Date.now(),
             date: actualDate,
@@ -1225,6 +1239,7 @@ function setupEventListeners() {
             partnerSti: partnerSti.value,
             actType,
             condomUse,
+            isRegularPartner,
             riskScore: calculateEncounterRisk(partnerStatus, partnerGender, partnerSti.value, actType, condomUse)
         };
 
@@ -1263,8 +1278,8 @@ function calculateEncounterRisk(partnerStatus, partnerGender, partnerSti, actTyp
     // but mark as HIV-negative for specific HIV testing recommendations
     const isHivNegativePartner = partnerStatus === 'negative';
     if (isHivNegativePartner && partnerSti !== 'yes') {
-        // If partner is HIV-negative and no known STIs, minimal risk but still track for STI screening
-        return 0.1; // Very low risk for dashboard purposes but will trigger STI testing
+        // Confirmed negative partner without STI — no meaningful HIV transmission risk
+        return 0;
     }
 
     // Use a categorical score for internal ranking (not for user display)
@@ -1431,7 +1446,25 @@ function updateGuidance() {
     } else if (latestHivTest?.result === 'negative' && windowedEncounters.length > 0) {
         level2.push(`<li><strong style="color:var(--warning-color)">30-Day Window Reminder:</strong> Your latest HIV test is negative, but <strong>${windowedEncounters.length} recent encounter${windowedEncounters.length === 1 ? '' : 's'}</strong> still fall within the window period before that test. Keep those exposures in mind until follow-up timing is more reliable.</li>`);
     } else if (latestHivTest?.result === 'negative') {
-        level3.push('<li><strong style="color:var(--success-color)">Recent HIV Result:</strong> Your latest logged HIV test is negative. Older encounters remain in history, but the app focuses current HIV risk guidance on newer or still-relevant exposures.</li>');
+        // Issue 22: Serodiscordant couple guidance for partners with U=U status
+        const hasUndetectablePartner = state.encounters.some(enc => enc.partnerStatus === 'positive_undetectable');
+        if (hasUndetectablePartner && latestHivTest?.result !== 'positive') {
+            level3.push('<li><strong style="color:var(--success-color)">U=U Awareness:</strong> You have a partner with HIV who is undetectable. When HIV is undetectable, it is untransmittable (U=U). If you are in a serodiscordant relationship, no additional HIV prevention is needed beyond your regular screening schedule.</li>');
+        }
+        
+        // Check if all post-test encounters are with confirmed-negative/U=U partners
+        const postTestEncounters = state.encounters.filter(enc =>
+            new Date(enc.date) > new Date(latestHivTest.date)
+        );
+        const allPostTestCovered = postTestEncounters.length > 0 && postTestEncounters.every(enc =>
+            enc.partnerStatus === 'negative' || enc.partnerStatus === 'positive_undetectable'
+        );
+        
+        if (allPostTestCovered) {
+            level3.push('<li><strong style="color:var(--success-color)">HIV Status Clear:</strong> Your negative HIV test covers your recent exposure history, and all subsequent partners have confirmed HIV-negative or undetectable status. No new HIV testing is indicated. Routine annual screening is recommended to stay current.</li>');
+        } else {
+            level3.push('<li><strong style="color:var(--success-color)">Recent HIV Result:</strong> Your latest logged HIV test is negative. Older encounters remain in history, but the app focuses current HIV risk guidance on newer or still-relevant exposures.</li>');
+        }
     }
 
     STI_TEST_TYPES.forEach(type => {
@@ -1880,6 +1913,7 @@ function renderEncounters() {
             document.getElementById('partner-status').value = enc.partnerStatus;
             document.getElementById('partner-gender').value = enc.partnerGender || 'cis_male';
             document.getElementById('partner-sti').value = enc.partnerSti || 'unknown';
+            document.getElementById('is-regular-partner').checked = enc.isRegularPartner || false;
             
             document.getElementById('act-type').value = enc.actType;
             document.getElementById('condom-use').value = enc.condomUse;
@@ -2030,6 +2064,15 @@ function validateImportSchema(importedState) {
     if (profile.pepStartDate && isNaN(Date.parse(profile.pepStartDate))) {
         errors.push(`Invalid profile.pepStartDate: "${profile.pepStartDate}"`);
     }
+    if (profile.hasSexWith && !Array.isArray(profile.hasSexWith)) {
+        errors.push(`Invalid profile.hasSexWith: must be an array`);
+    } else if (profile.hasSexWith) {
+        profile.hasSexWith.forEach((gender, idx) => {
+            if (!validGenders.includes(gender)) {
+                errors.push(`Invalid profile.hasSexWith[${idx}]: "${gender}"`);
+            }
+        });
+    }
     
     // Validate encounters
     importedState.encounters.forEach((enc, index) => {
@@ -2050,6 +2093,12 @@ function validateImportSchema(importedState) {
         }
         if (enc.partnerSti && !['yes', 'no', 'unknown'].includes(enc.partnerSti)) {
             errors.push(`Encounter ${index}: Invalid partnerSti "${enc.partnerSti}"`);
+        }
+        if (enc.isRegularPartner !== undefined && typeof enc.isRegularPartner !== 'boolean') {
+            errors.push(`Encounter ${index}: Invalid isRegularPartner "${enc.isRegularPartner}" (must be boolean)`);
+        }
+        if (enc.riskScore !== undefined && typeof enc.riskScore !== 'number') {
+            errors.push(`Encounter ${index}: Invalid riskScore "${enc.riskScore}" (must be number)`);
         }
     });
     

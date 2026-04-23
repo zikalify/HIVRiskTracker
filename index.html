@@ -159,7 +159,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I am taking PEP</strong>
-                            <span>Post-Exposure Prophylaxis after a possible HIV exposure.</span>
+                            <span>If you are currently taking Post-Exposure Prophylaxis after a recent potential HIV exposure, enable this. WHO recommends a 28-day course starting within 72 hours. The app will track your course and remind you about follow-up testing.</span>
                         </div>
                     </div>
                     <div id="pep-date-group" class="form-group" style="display: none; margin-top: 10px; padding-left: 60px;">
@@ -174,7 +174,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I have had the Hep B vaccine</strong>
-                            <span>Vaccination helps prevent hepatitis B infection.</span>
+                            <span>If you have completed the hepatitis B vaccine series, enable this. This prevents hepatitis B infection through sexual contact and other exposure routes. If unsure, a blood test can check your immunity status.</span>
                         </div>
                     </div>
                     <div class="toggle-group">
@@ -184,7 +184,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I have had the mpox vaccine</strong>
-                            <span>Vaccination helps prevent mpox infection.</span>
+                            <span>If you have received one or both doses of the mpox (JYNNEOS) vaccine, enable this. This is recommended for MSM, trans women, people with multiple partners, and PWID in areas with transmission.</span>
                         </div>
                     </div>
                     <div class="toggle-group" id="circumcision-group" style="display: none;">
@@ -194,7 +194,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I am circumcised</strong>
-                            <span>Medical male circumcision.</span>
+                            <span>Medical male circumcision reduces HIV acquisition risk during insertive vaginal sex by approximately 60%. This is based on WHO evidence from randomized controlled trials in Africa.</span>
                         </div>
                     </div>
                 </div>
@@ -208,7 +208,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I have an active STI</strong>
-                            <span>Untreated sexually transmitted infection.</span>
+                            <span>If you currently have an untreated STI (symptomatic or diagnosed), enable this. STIs increase HIV transmission risk by causing inflammation and mucosal breaks. Clear this after completing treatment.</span>
                         </div>
                     </div>
                     <div class="toggle-group">
@@ -217,8 +217,8 @@
                             <span class="slider round"></span>
                         </label>
                         <div class="toggle-text">
-                            <strong>I have new or changing partners</strong>
-                            <span>More than one partner over time, or a new partner whose infection status may be unknown.</span>
+                            <strong>I am currently seeing new or multiple partners</strong>
+                            <span>Turn this off if you are in an established relationship with a regular partner. This affects screening frequency and prevention recommendations.</span>
                         </div>
                     </div>
                     <div class="toggle-group">
@@ -228,7 +228,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>I inject drugs</strong>
-                            <span>Shared injecting equipment recently.</span>
+                            <span>If you have shared injecting equipment (needles, syringes, cookers) recently, enable this. This is a key population category for HIV and hepatitis prevention programs. Turn off if you have stopped or use only sterile supplies.</span>
                         </div>
                     </div>
                     <div class="toggle-group">
@@ -238,7 +238,7 @@
                         </label>
                         <div class="toggle-text">
                             <strong>No sexual history</strong>
-                            <span>I have never had sexual contact.</span>
+                            <span>If you have never had sexual contact, enable this. The app will focus on prevention planning and vaccination recommendations rather than exposure-based testing guidance. Turn off once you become sexually active.</span>
                         </div>
                     </div>
                 </div>
@@ -362,6 +362,14 @@
                             <option value="positive_undetectable">Positive (Undetectable / U=U)</option>
                             <option value="positive_detectable">Positive (Detectable / Not on Treatment)</option>
                         </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="is-regular-partner" style="width: auto;">
+                            <span>This is a regular/established partner (same person as previous encounters)</span>
+                        </label>
+                        <p class="test-disclaimer" style="margin-top: 5px;">Regular partners with confirmed negative status enable more relaxed testing intervals. Only check this if this is someone you've seen before and know well.</p>
                     </div>
 
                     <div class="form-group">
