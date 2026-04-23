@@ -126,6 +126,7 @@ const userPepStart = document.getElementById('user-pep-start');
 const pepDateGroup = document.getElementById('pep-date-group');
 const userHepBVax = document.getElementById('user-hep-b-vax');
 const userMpoxVax = document.getElementById('user-mpox-vax');
+const userHpvVax = document.getElementById('user-hpv-vax');
 const userCircumcised = document.getElementById('user-circumcised');
 const userSti = document.getElementById('user-sti');
 const userNewPartners = document.getElementById('user-new-partners');
@@ -990,6 +991,7 @@ function loadState() {
     }
     userHepBVax.checked = state.profile.hepBVaccinated || false;
     userMpoxVax.checked = state.profile.mpoxVaccinated || false;
+    userHpvVax.checked = state.profile.hpvVaccinated || false;
     userCircumcised.checked = state.profile.circumcised || false;
     userSti.checked = state.profile.sti || false;
     userNewPartners.checked = state.profile.newPartners || false;
@@ -1099,6 +1101,7 @@ function setupEventListeners() {
     });
     userHepBVax.addEventListener('change', (e) => { state.profile.hepBVaccinated = e.target.checked; saveState(); });
     userMpoxVax.addEventListener('change', (e) => { state.profile.mpoxVaccinated = e.target.checked; saveState(); });
+    userHpvVax.addEventListener('change', (e) => { state.profile.hpvVaccinated = e.target.checked; saveState(); });
     userCircumcised.addEventListener('change', (e) => { state.profile.circumcised = e.target.checked; recalculateRiskHistory(); saveState(); });
     userSti.addEventListener('change', (e) => { state.profile.sti = e.target.checked; recalculateRiskHistory(); saveState(); });
     userNewPartners.addEventListener('change', (e) => { state.profile.newPartners = e.target.checked; saveState(); });
