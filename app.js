@@ -197,6 +197,7 @@ function ensureStateShape() {
     if (state.profile.mpoxVaccinated === undefined) state.profile.mpoxVaccinated = false;
     if (state.profile.hpvVaccinated === undefined) state.profile.hpvVaccinated = false;
     if (state.profile.prepType === undefined) state.profile.prepType = 'daily';
+    if (state.profile.sexWorker === undefined) state.profile.sexWorker = false;
 }
 
 function migrateLegacyState() {
@@ -458,6 +459,24 @@ function getRecommendedFollowUpTests() {
     const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
     const isUserInKeyNetwork = effectiveHasSexWith.some(pg => isKeyPopulationEncounter(uGender, pg)) || uGender.startsWith('trans_');
 
+    // WHO: Elevated risk factors for more frequent screening (3-6 months)
+    const hasElevatedRisk = state.profile.onPrep || 
+                            state.profile.onPep || 
+                            state.profile.sti ||
+                            state.profile.newPartners ||
+                            state.profile.sexWorker ||
+                            (latestTests.hiv?.result === 'positive');
+    
+    // Check if test is due based on screening interval
+    const isTestDue = (type, intervalDays) => {
+        const test = latestTests[type];
+        if (!test) return true;
+        if (['pending', 'inconclusive'].includes(test.result)) return true;
+        
+        const daysSinceTest = Math.floor((new Date() - new Date(test.date)) / (1000 * 60 * 60 * 24));
+        return daysSinceTest >= intervalDays;
+    };
+
     if (!latestEncounterDate) return recommendations;
 
     const shouldRetestAfterEncounter = (type) => {
@@ -504,8 +523,24 @@ function getRecommendedFollowUpTests() {
         enc.partnerStatus === 'negative' || enc.partnerStatus === 'positive_undetectable'
     );
     
-    // Only recommend HIV testing if not all partners were confirmed negative
-    if (!allRecentEncountersHivNegative && shouldRetestAfterEncounter('hiv')) {
+    // HIV screening intervals: annual for key populations, 3-6 months for elevated risk
+    // Key populations: MSM, trans women, sex workers, PWID
+    const isMSM = (uGender === 'cis_male' || uGender === 'trans_male') && 
+                  effectiveHasSexWith.some(p => ['cis_male', 'trans_male', 'non_binary'].includes(p));
+    const isTransWoman = uGender === 'trans_female';
+    const isSexWorker = state.profile.sexWorker;
+    const isPWID = state.profile.pwid;
+    const isKeyPopulation = isMSM || isTransWoman || isSexWorker || isPWID;
+    
+    // HIV testing logic with screening intervals for key populations
+    if (isKeyPopulation) {
+        // Key populations: annual screening, 3-6 months if elevated risk
+        const screeningInterval = hasElevatedRisk ? 180 : 365; // 6 months or 1 year
+        if (isTestDue('hiv', screeningInterval)) {
+            recommendations.push('HIV (routine screening)');
+        }
+    } else if (!allRecentEncountersHivNegative && shouldRetestAfterEncounter('hiv')) {
+        // Non-key populations with recent exposures
         recommendations.push('HIV');
     } else if (!allRecentEncountersHivNegative) {
         const latestHiv = latestTests.hiv;
@@ -523,38 +558,47 @@ function getRecommendedFollowUpTests() {
     }
 
     if (sexualExposure) {
-        // Check if there are any high-risk encounters that warrant testing
-        // Gonorrhea, chlamydia, and syphilis transmit via vaginal AND anal sex per WHO
+        // WHO (July 2025): Gonorrhea/chlamydia screening for MSM, sex workers
+        // WHO recommends at least annual or 6-monthly screening for sex workers and MSM
+        const stisToRecommend = [];
+        
+        // MSM and sex workers get regular STI screening per WHO
+        if (isMSM || isSexWorker) {
+            const stis = ['gonorrhea', 'chlamydia'];
+            stis.forEach(type => {
+                const screeningInterval = hasElevatedRisk ? 180 : 365; // 6 months or 1 year
+                if (isTestDue(type, screeningInterval)) {
+                    stisToRecommend.push(type);
+                }
+            });
+        }
+        
+        // Also check for high-risk encounters that warrant immediate testing
         const hasHighRiskEncounters = state.encounters.some(enc => {
             const hasHivRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
-            const condomUsed = enc.condomUse === 'yes';
             const isHighRiskAct = ['receptive_anal', 'insertive_anal', 'receptive_vaginal', 'insertive_vaginal'].includes(enc.actType);
             const partnerHasSti = enc.partnerSti === 'yes';
-
-            // Only recommend testing if there's actual risk
-            // Risk factors: unknown/positive partner status OR partner has STI
-            // Condom use alone with confirmed-negative partner is not a risk factor
             const hasActualRisk = hasHivRisk || partnerHasSti;
             return isHighRiskAct && hasActualRisk;
         });
         
         if (hasHighRiskEncounters) {
             ['gonorrhea', 'chlamydia'].forEach(type => {
-                if (shouldRetestAfterEncounter(type)) {
-                    recommendations.push(TEST_TYPE_LABELS[type]);
+                if (shouldRetestAfterEncounter(type) && !stisToRecommend.includes(type)) {
+                    stisToRecommend.push(type);
                 }
             });
         }
         
-        // Syphilis has broader WHO screening guidance - recommend for new partners or any sexual exposure
-        // But still respect condom use and partner status to avoid over-triggering
-        const shouldRecommendSyphilis = state.encounters.some(enc => {
+        stisToRecommend.forEach(type => recommendations.push(TEST_TYPE_LABELS[type]));
+        
+        // WHO (July 2025): Syphilis screening - annual for MSM/sex workers, 3-6 months if elevated risk
+        // Also recommend for high-risk encounters
+        const syphilisDueForScreening = (isMSM || isSexWorker) && isTestDue('syphilis', hasElevatedRisk ? 180 : 365);
+        const shouldRecommendSyphilis = syphilisDueForScreening || state.encounters.some(enc => {
             const hasPartnerRisk = enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable';
             const isPenetrativeAct = ['receptive_anal', 'insertive_anal', 'receptive_vaginal', 'insertive_vaginal'].includes(enc.actType);
-            const noCondom = enc.condomUse !== 'yes';
             const partnerHasSti = enc.partnerSti === 'yes';
-            // Only recommend syphilis testing if penetrative act AND (partner risk OR partner STI)
-            // Condom use alone with confirmed-negative partner is not a risk factor
             return isPenetrativeAct && (hasPartnerRisk || partnerHasSti);
         }) || state.profile.newPartners;
         
@@ -710,7 +754,7 @@ function toggleCircumcisionVisibility() {
 }
 
 /**
- * WHO/CDC Clinical Logic: Determines if an encounter involves a High-Prevalence Network (Key Population)
+ * WHO Clinical Logic: Determines if an encounter involves a High-Prevalence Network (Key Population)
  */
 function isKeyPopulationEncounter(uGender, pGender) {
     if (!uGender || !pGender) return false;
@@ -1060,6 +1104,10 @@ function setupEventListeners() {
     userNewPartners.addEventListener('change', (e) => { state.profile.newPartners = e.target.checked; saveState(); });
     userPwid.addEventListener('change', (e) => { state.profile.pwid = e.target.checked; recalculateRiskHistory(); saveState(); });
     userVirgin.addEventListener('change', (e) => { state.profile.isVirgin = e.target.checked; refreshApp(); saveState(); });
+    const userSexWorker = document.getElementById('user-sex-worker');
+    if (userSexWorker) {
+        userSexWorker.addEventListener('change', (e) => { state.profile.sexWorker = e.target.checked; saveState(); });
+    }
 
     userHasSexWithCheckboxes.forEach(cb => {
         cb.addEventListener('change', () => {
@@ -1571,31 +1619,40 @@ function updateGuidance() {
         level3.push('<li><strong style="color:var(--success-color)">Serodiscordant Couple Guidance:</strong> You have logged encounters with a partner who is HIV-positive with undetectable viral load (U=U). Per WHO and the U=U consensus, when your partner maintains an undetectable viral load through consistent treatment, there is <strong>zero risk</strong> of sexual HIV transmission. No additional HIV testing is needed specifically for exposure to this partner. Support your partner in maintaining treatment adherence and regular viral load monitoring.</li>');
     }
 
-    // Hep B vaccine for any unvaccinated person with sexual exposure or risk factors
-    const hasSexualRisk = hasSexualExposure(state.encounters) && state.encounters.some(enc => 
-        enc.partnerStatus !== 'negative' && enc.partnerStatus !== 'positive_undetectable'
-    );
-    const shouldSuggestHepBVaccine = !state.profile.hepBVaccinated && (
-        state.profile.pwid ||
-        state.profile.newPartners ||
-        hasNeedleExposure(state.encounters) ||
-        hasSexualRisk
-    );
-
+    // Hep B vaccine - WHO: Recommended for newborns, children up to 18, and adults at higher risk
+    // Risk factors: multiple partners, PWID, chronic liver disease, diabetes, etc.
+    const hasHepBRiskFactors = state.profile.pwid || state.profile.newPartners || isUserInKeyNetwork;
+    const shouldSuggestHepBVaccine = !state.profile.hepBVaccinated && hasHepBRiskFactors;
     if (shouldSuggestHepBVaccine) {
-        level3.push('<li><strong style="color:var(--accent-color)">Hep B Vaccine:</strong> WHO recommends hepatitis B vaccination for unvaccinated adults at risk, including people with multiple partners, those who have sex with unknown-status partners, and people who inject drugs. Consider serology testing (anti-HBs) first if your immune status is unknown, as prior infection or vaccination may already protect you. If susceptible, the 2- or 3-dose series provides excellent protection.</li>');
+        level3.push('<li><strong style="color:var(--accent-color)">Hep B Vaccine:</strong> WHO recommends hepatitis B vaccination for adults at higher risk of infection, including people who inject drugs, those with multiple sexual partners, and those in key populations. Vaccination is also routinely recommended for all infants and children up to age 18. The 2- or 3-dose series provides excellent protection. Consider serology testing (anti-HBs) first if your immune status is unknown.</li>');
     }
 
-    // Mpox vaccine for key populations including PWID (skin-to-skin contact during needle use)
-    const shouldSuggestMpoxVaccine = !state.profile.mpoxVaccinated && (isUserInKeyNetwork || state.profile.newPartners || state.profile.pwid);
+    // Mpox vaccine for key populations per WHO interim guidance
+    // WHO recommends for: MSM with multiple partners, individuals with multiple casual partners, sex workers, health workers at risk, lab personnel
+    const hasHighRiskPartner = state.encounters.some(enc =>
+        enc.partnerStatus === 'positive_detectable' ||
+        enc.partnerStatus === 'unknown' ||
+        enc.partnerSti === 'yes'
+    );
+    const isCisWoman = state.profile.gender === 'cis_female';
+    const isCisManMSM = (state.profile.gender === 'cis_male') && profileFactors.includes('msm');
+
+    const shouldSuggestMpoxVaccine = !state.profile.mpoxVaccinated && (
+        state.profile.sexWorker ||
+        state.profile.pwid ||
+        state.profile.sti ||
+        (isUserInKeyNetwork && (state.profile.newPartners || state.profile.sti)) ||
+        (isCisWoman && hasHighRiskPartner) ||
+        (isCisManMSM && state.profile.newPartners)
+    );
     if (shouldSuggestMpoxVaccine) {
-        level3.push('<li><strong style="color:var(--accent-color)">Mpox Vaccine:</strong> WHO recommends mpox vaccination for MSM, trans women, people with multiple partners, and PWID in areas with transmission. Check with local health services about availability and eligibility.</li>');
+        level3.push('<li><strong style="color:var(--accent-color)">Mpox Vaccine:</strong> WHO interim guidance recommends mpox vaccination for MSM with multiple partners, individuals with multiple casual partners, sex workers, and people with recent STI diagnoses. The JYNNEOS vaccine is a two-dose series given 28 days apart. Check with local health services about availability and eligibility.</li>');
     }
 
-    // HPV vaccine for MSM and trans women (WHO recommendation)
-    const shouldSuggestHPVVaccine = !state.profile.hpvVaccinated && (profileFactors.includes('msm') || profileFactors.includes('trans_woman'));
+    // HPV vaccine - WHO: Primary target is girls 9-14, secondary targets include boys and older females where feasible and affordable
+    const shouldSuggestHPVVaccine = !state.profile.hpvVaccinated;
     if (shouldSuggestHPVVaccine) {
-        level3.push('<li><strong style="color:var(--accent-color)">HPV Vaccine:</strong> WHO recommends HPV vaccination for MSM and trans women to prevent anal cancer and other HPV-related diseases. If you were not vaccinated as an adolescent, ask your clinician about catch-up vaccination (up to age 26 routinely, or older based on shared clinical decision-making).</li>');
+        level3.push('<li><strong style="color:var(--accent-color)">HPV Vaccine:</strong> WHO recommends HPV vaccination primarily for girls aged 9-14. Secondary targets include boys and older females where feasible and affordable. HPV vaccination can prevent cervical cancer and other HPV-related diseases. If you were not vaccinated as an adolescent, ask your clinician about catch-up vaccination options.</li>');
     }
 
     if (state.profile.pwid) {
@@ -2063,6 +2120,9 @@ function validateImportSchema(importedState) {
     }
     if (profile.pepStartDate && isNaN(Date.parse(profile.pepStartDate))) {
         errors.push(`Invalid profile.pepStartDate: "${profile.pepStartDate}"`);
+    }
+    if (profile.sexWorker !== undefined && typeof profile.sexWorker !== 'boolean') {
+        errors.push(`Invalid profile.sexWorker "${profile.sexWorker}" (must be boolean)`);
     }
     if (profile.hasSexWith && !Array.isArray(profile.hasSexWith)) {
         errors.push(`Invalid profile.hasSexWith: must be an array`);
