@@ -886,6 +886,16 @@ function hasRecentIntimateExposure(encounters = state.encounters, days = 21) {
     });
 }
 
+function hasOnlyRegularCoveredPartnerPattern(encounters = state.encounters) {
+    const regularEncounters = (encounters || []).filter(enc => enc && enc.isRegularPartner);
+    if (!regularEncounters.length) return false;
+
+    return regularEncounters.every(enc =>
+        (enc.partnerStatus === 'negative' || enc.partnerStatus === 'positive_undetectable') &&
+        enc.partnerSti !== 'yes'
+    );
+}
+
 /**
  * WHO Clinical Logic: Determines if an encounter involves a High-Prevalence Network (Key Population)
  */
@@ -1624,6 +1634,7 @@ function updateGuidance() {
     const latestTests = getLatestTestsByType();
     const latestEncounterDate = getLatestEncounterDate();
     const latestMeaningfulEncounterDate = getLatestMeaningfulEncounterDate();
+    const hasRegularCoveredPartnerPattern = hasOnlyRegularCoveredPartnerPattern(state.encounters);
     const latestHivTest = latestTests.hiv;
     const { relevantEncounters, historicalEncounters, windowedEncounters } = getCurrentHivRiskContext();
 
@@ -1883,7 +1894,11 @@ function updateGuidance() {
 
             if (routineFollowUpTests.length > 0) {
                 const routineFollowUpList = routineFollowUpTests.map(type => getFollowUpItemLabel(type, 'routine')).join(', ');
-                stiMaintenance.push(`<li><strong>Routine Screening:</strong> Based on your profile and ongoing activity, keep these tests current without treating them as a recent-exposure problem: ${routineFollowUpList}.</li>`);
+                if (hasRegularCoveredPartnerPattern) {
+                    stiMaintenance.push(`<li><strong>Routine Screening:</strong> Your recent logs suggest regular partner context with HIV-covered status. Keep these tests current at routine intervals unless your exposure pattern changes: ${routineFollowUpList}.</li>`);
+                } else {
+                    stiMaintenance.push(`<li><strong>Routine Screening:</strong> Based on your profile and ongoing activity, keep these tests current without treating them as a recent-exposure problem: ${routineFollowUpList}.</li>`);
+                }
             }
 
             if (baselineFollowUpItems.length > 0) {
@@ -1907,6 +1922,10 @@ function updateGuidance() {
         const hasDisparity = encounterPartnerGenders.some(pg => pg && !profileHasSexWith.includes(pg));
         if (hasDisparity) {
             stiMaintenance.push('<li><strong>Update Profile:</strong> Your logged partners don\'t match your profile settings. Update "My Profile" for more accurate clinical guidance.</li>');
+        }
+
+        if (hasRegularCoveredPartnerPattern) {
+            stiMaintenance.push('<li><strong>Regular Partner Context:</strong> You marked one or more encounters as regular/established partners with HIV-covered status. This can support routine follow-up planning, but update entries promptly if partner status or STI context changes.</li>');
         }
 
         // Circumcision note for men who have vaginal sex with women (includes bisexual men)
@@ -2230,6 +2249,7 @@ function exportData() {
 
 function validateImportSchema(importedState) {
     const errors = [];
+    const warnings = [];
     
     // Basic structure validation
     if (!importedState || typeof importedState !== 'object') {
@@ -2271,7 +2291,9 @@ function validateImportSchema(importedState) {
         const effectiveHasSexWith = [...new Set([...profileHasSexWith, ...encounterPartnerGenders])];
         const isUserEligibleForOnDemand = isUserInMSMNetwork(profile.gender || 'cis_male', effectiveHasSexWith);
         if (!isUserEligibleForOnDemand) {
-            errors.push('Invalid profile.prepType: "on_demand" is only supported for MSM-aligned profiles in this app.');
+            // Auto-coerce instead of hard-failing: adjust the imported data in-place and warn the user.
+            importedState.profile.prepType = 'daily';
+            warnings.push('PrEP type was "on-demand (2-1-1)" in the imported file, but this mode is restricted to MSM-aligned profiles. It has been automatically changed to "daily" PrEP. You can update this in your Profile settings after import.');
         }
     }
     if (profile.pepStartDate && isNaN(Date.parse(profile.pepStartDate))) {
@@ -2340,6 +2362,8 @@ function validateImportSchema(importedState) {
     if (errors.length > 0) {
         throw new Error("Schema validation failed:\n• " + errors.join("\n• "));
     }
+
+    return warnings;
 }
 
 function importData(file) {
@@ -2349,9 +2373,15 @@ function importData(file) {
             const importedState = JSON.parse(e.target.result);
             
             // Issue 18: Comprehensive schema validation
-            validateImportSchema(importedState);
+            // validateImportSchema may coerce certain fields (e.g. on_demand → daily) and return
+            // a warnings array describing any automatic adjustments made to the imported data.
+            const importWarnings = validateImportSchema(importedState);
 
-            if (confirm("This will overwrite all current data with the imported file. This action cannot be undone. Continue?")) {
+            const warningNotice = importWarnings.length > 0
+                ? "\n\n⚠️ Import adjustments:\n• " + importWarnings.join("\n• ") + "\n\n"
+                : "\n\n";
+
+            if (confirm("This will overwrite all current data with the imported file. This action cannot be undone." + warningNotice + "Continue?")) {
                 // Merge with default state structure to handle potential missing fields from older versions
                 state = {
                     ...state,

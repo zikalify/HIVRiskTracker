@@ -34,6 +34,8 @@ Users can download their entire profile and history as a `.json` file from the *
 ### Importing Data
 Backups can be restored at any time. The app performs comprehensive schema validation to ensure file integrity and prevent corrupted data from being imported. **Note: Importing will overwrite your current local data.**
 
+> **On-demand PrEP (2-1-1):** This mode is restricted to MSM-aligned profiles in-app. If an imported backup contains `on_demand` PrEP for a non-eligible profile, it will be automatically adjusted to `daily` PrEP during import and a warning will be shown. You can update your PrEP type in Profile settings after import.
+
 ### Data Security Note
 This app stores data locally in your browser using `localStorage`. Export files are **unencrypted JSON** by design — this allows for easy backup and migration, but means anyone with access to your export file can read its contents. Keep your export files secure and private.
 
