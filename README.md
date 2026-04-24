@@ -63,6 +63,15 @@ This app stores data locally in your browser using `localStorage`. Export files 
 5. **Configure your profile**: Fill in your identity, protection methods, and clinical factors in the "My Profile" tab for more accurate guidance.
 6. **Set up testing history**: Log your latest test results for comprehensive risk assessment and personalized recommendations.
 
+## ✅ Logic Validation
+
+You can run local checks to catch regressions in risk/PEP logic:
+
+- `npm run check:risk-matrix` — exhaustive combination sweep across user gender, partner gender, act type, partner status, condom use, and STI context.
+- `npm run test:guidance` — targeted scenario checks for guidance logic.
+
+The risk matrix script exits with a non-zero code if it finds outliers (for example, PEP on very low-risk routes or unexpected risk escalation in guarded combinations).
+
 ## ⚖️ Important Disclaimer
 
 **This is a personal side project and NOT a medical device.**

@@ -1,0 +1,8 @@
+{
+  "name": "hiv-risk-tracker",
+  "private": true,
+  "scripts": {
+    "check:risk-matrix": "node tests/risk-matrix-check.js",
+    "test:guidance": "node test_guidance_logic.js"
+  }
+}
