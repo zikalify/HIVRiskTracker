@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hiv-risk-tracker-v73';
+const CACHE_NAME = 'hiv-risk-tracker-v74';
 const ASSETS = [
   '/HIVRiskTracker/',
   '/HIVRiskTracker/?source=pwa',

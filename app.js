@@ -1863,32 +1863,9 @@ function updateGuidance() {
 
         // WHO-aligned follow-up: persist until all recommended tests are completed
         if (meaningfulExposureCount > 0 || exposureFollowUpTests.length > 0 || routineFollowUpTests.length > 0 || baselineFollowUpItems.length > 0) {
-            const earliestUntestedDate = getEarliestUntestedEncounterDate();
-            const timingAdvice = getTestingTimingAdvice(exposureFollowUpTests, earliestUntestedDate || latestMeaningfulEncounterDate);
             if (exposureFollowUpTests.length > 0) {
                 const exposureFollowUpList = exposureFollowUpTests.map(type => getFollowUpItemLabel(type)).join(', ');
-                let fullMessage = `<li><strong>Follow-Up:</strong> You have logged <strong>${meaningfulExposureCount} higher-risk encounter${meaningfulExposureCount === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early: ${exposureFollowUpList}.`;
-            
-                if (timingAdvice && timingAdvice.length > 0) {
-                    const hasRecentActivity = state.encounters.some(enc => {
-                        const daysSince = Math.floor((new Date() - new Date(enc.date)) / (1000 * 60 * 60 * 24));
-                        return daysSince <= 90;
-                    });
-
-                    if (hasRecentActivity && meaningfulExposureCount > 0) {
-                        fullMessage += `<br><strong>Testing Timing:</strong> <em>Complete these tests at the optimal windows shown below for accurate detection after recent exposure.</em>`;
-                    } else {
-                        fullMessage += `<br><strong>Testing Timing:</strong>`;
-                    }
-                } else {
-                    fullMessage += `<br><strong>Testing Timing:</strong>`;
-                }
-                
-                timingAdvice.forEach(timing => {
-                    fullMessage += `<br><span style="margin-left: 20px; display: inline-block;">• ${timing}</span>`;
-                });
-
-                fullMessage += `</li>`;
+                const fullMessage = `<li><strong>Follow-Up:</strong> You have logged <strong>${meaningfulExposureCount} higher-risk encounter${meaningfulExposureCount === 1 ? '' : 's'}</strong> since your latest resolved STI result. WHO recommends retesting after potential exposure to ensure any new infection is detected early: ${exposureFollowUpList}.</li>`;
                 stiMaintenance.push(fullMessage);
             }
 
